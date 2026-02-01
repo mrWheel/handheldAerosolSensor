@@ -1,0 +1,82 @@
+
+#include <PKAE_Timer.h>
+
+//-- Output pin used to Retain (HIGH) or Kill (LOW) supply power
+static const uint8_t MY_POWER = GPIO_PIN_LATCH;
+//-- Input Pin for Push Switch 
+static const uint8_t SWITCH = GPIO_PIN_SWITCH;
+
+//==========================================================================================================
+// KillPower - Turn Off Power I/O and Rapid Flash LED until power is lost.                                 |
+//==========================================================================================================
+
+void KillPower() 
+{
+  boolean lLEDstate = LOW;
+  PKAE_Timer BlinkLED(50);
+  digitalWrite(MY_POWER, LOW);
+
+  // Rapid flash Onboard LED indicate power about to be lost
+  while (true) 
+  {
+    if (BlinkLED.IsTimeUp()) 
+    {
+      lLEDstate = !lLEDstate;
+      digitalWrite(LED_BUILTIN, lLEDstate);
+    }
+  }
+}
+
+//==========================================================================================================
+// SETUP                                                                                                   |
+//==========================================================================================================
+
+void setup() 
+{
+// MY_POWER Pin wired to Gate of N-Channel, Set High too keep Power ON!
+//---------------------------------------------------------------------
+  pinMode(MY_POWER, OUTPUT);          
+  digitalWrite(MY_POWER, HIGH);
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(SWITCH, INPUT_PULLUP);
+
+  for(int i=0; i<5; i++) 
+  {
+    digitalWrite(LED_BUILTIN, HIGH);  
+    delay(100);                       
+    digitalWrite(LED_BUILTIN, LOW);   
+    delay(100);                       
+  }
+}
+
+//==========================================================================================================
+// LOOP                                                                                                    |
+//==========================================================================================================
+void loop() 
+{
+  boolean lLEDstate = LOW, lReleased = true;
+
+  PKAE_Timer StableLED(300);
+  PKAE_Timer ButtonHeld(3000);
+
+  while (true) 
+  {
+    if (digitalRead(SWITCH) == LOW) 
+    {  
+      if (lReleased and StableLED.IsTimeUp()) 
+      {
+        lLEDstate = !lLEDstate;
+        digitalWrite(LED_BUILTIN, lLEDstate);
+      }
+      lReleased = false;
+    } 
+    else 
+    {
+      lReleased = true;
+      ButtonHeld.Reset();
+    }
+
+    if (ButtonHeld.IsTimeUp()) KillPower();
+  }
+}

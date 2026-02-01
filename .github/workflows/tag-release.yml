@@ -1,0 +1,160 @@
+# GitHub Actions workflow: Auto-tag releases based on version in <mainProgram>.cpp
+# Don't forget to go to [Settings] -> [Actions] - > [General] 
+# and set the workflow permissions to "Read and write permissions" for the workflow to push tags.
+#
+# This workflow will:
+# 1. Trigger on push to the main branch.
+# 2. Extract the version from <PROGRAM_DIR>/<PROGRAM_SRC> (expected format: const char* PROG_VERSION = "v1.2.3";)
+# 3. Fetch all existing tags.
+# 4. Determine the latest semver-style tag starting with "v".
+# 5. Compare the current version with the latest tag.
+# 6. If the current version is greater than the latest tag, create a new tag and push it to the repository.
+# 7. Detect if major or minor version changed (vX.Y.Z):
+#    - If X or Y changed: Create a GitHub Release with commit messages
+#    - If only Z changed: Create tag only (patch update)
+# 8. If the current version is the same or older than the latest tag, skip tagging and log a warning.
+# 9. If no tags exist, create the first tag and release.
+#
+
+name: Auto Tag Release
+
+# Define environment variables at the workflow level
+env:
+  PROGRAM_NAME: "luchtSensorHandheld"
+  PROGRAM_SRC: "luchtSensor.cpp"
+  PROGRAM_DIR: "src"
+
+# Run this workflow only when pushing to the main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code from the repo
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Extract version from the program file
+      - name: Get version from ${{ env.PROGRAM_SRC }}
+        id: get_version
+        run: |
+          VERSION=$(grep 'const char\* PROG_VERSION' ${{ env.PROGRAM_DIR }}/${{ env.PROGRAM_SRC }} | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "VERSION=$VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          # Also set as environment variable for later steps
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # Step 3: Fetch all existing Git tags
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      # Step 4: Determine the latest semver-style tag starting with "v"
+      - name: Get latest semver tag
+        id: latest_tag
+        run: |
+          # Get latest tag that matches semver format (v1.2.3)
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v([0-9]+\.){2}[0-9]+$' | head -n 1 || true)
+          echo "DEBUG: LATEST=$LATEST"
+          echo "LATEST=$LATEST" >> $GITHUB_OUTPUT
+
+      # Step 5: Compare current version with latest tag and decide whether to proceed
+      - name: Compare version
+        id: compare_version
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          LATEST="${{ steps.latest_tag.outputs.LATEST }}"
+
+          echo "Comparing ${{ env.PROGRAM_SRC }} VERSION: $VERSION with LATEST: $LATEST"
+
+          # Check if VERSION is empty
+          if [ -z "$VERSION" ]; then
+            echo "::error::No version found in ${{ env.PROGRAM_DIR }}/${{ env.PROGRAM_SRC }}. Skipping tagging."
+            echo "PROCEED=false" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          if [ -z "$LATEST" ]; then
+            echo "No existing tag found. Proceeding to tag."
+            echo "PROCEED=true" >> $GITHUB_ENV
+            echo "MAKE_RELEASE=true" >> $GITHUB_ENV
+          elif [ "$VERSION" = "$LATEST" ]; then
+            echo "::warning::Version $VERSION already exists. Skipping tagging."
+            echo "PROCEED=false" >> $GITHUB_ENV
+          elif [ "$(printf '%s\n' "$LATEST" "$VERSION" | sort -V | head -n1)" = "$VERSION" ]; then
+            echo "::warning::Version $VERSION is not greater than $LATEST. Skipping tagging."
+            echo "PROCEED=false" >> $GITHUB_ENV
+          else
+            echo "Version $VERSION is newer than $LATEST. Proceeding to tag."
+            echo "PROCEED=true" >> $GITHUB_ENV
+            
+            # Parse versions to check if major or minor changed
+            VERSION_MAJOR=$(echo "$VERSION" | sed -E 's/v([0-9]+)\..*/\1/')
+            VERSION_MINOR=$(echo "$VERSION" | sed -E 's/v[0-9]+\.([0-9]+)\..*/\1/')
+            LATEST_MAJOR=$(echo "$LATEST" | sed -E 's/v([0-9]+)\..*/\1/')
+            LATEST_MINOR=$(echo "$LATEST" | sed -E 's/v[0-9]+\.([0-9]+)\..*/\1/')
+            
+            echo "Version: $VERSION_MAJOR.$VERSION_MINOR vs Latest: $LATEST_MAJOR.$LATEST_MINOR"
+            
+            if [ "$VERSION_MAJOR" -gt "$LATEST_MAJOR" ] || [ "$VERSION_MAJOR" -eq "$LATEST_MAJOR" -a "$VERSION_MINOR" -gt "$LATEST_MINOR" ]; then
+              echo "Major or Minor version changed. Will create a Release."
+              echo "MAKE_RELEASE=true" >> $GITHUB_ENV
+            else
+              echo "Only patch version changed. Will create tag only."
+              echo "MAKE_RELEASE=false" >> $GITHUB_ENV
+            fi
+          fi
+
+      # Step 6: Create and push new tag if approved
+      - name: Create and push tag
+        if: env.PROCEED == 'true' && env.VERSION != ''
+        run: |
+          echo "Creating tag for ${{ env.PROGRAM_SRC }}: $VERSION"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+      # Step 7: Generate release notes from commit messages
+      - name: Generate release notes
+        if: env.MAKE_RELEASE == 'true' && env.PROCEED == 'true'
+        id: release_notes
+        run: |
+          VERSION="${{ env.VERSION }}"
+          LATEST="${{ steps.latest_tag.outputs.LATEST }}"
+          
+          echo "## Changes" > release_notes.txt
+          echo "" >> release_notes.txt
+          
+          if [ -z "$LATEST" ]; then
+            echo "No previous tag, getting all commits (max 20)..."
+            git log --pretty=format:"- %s" | head -n 20 >> release_notes.txt
+            echo "" >> release_notes.txt
+            echo "" >> release_notes.txt
+            echo "_First release_" >> release_notes.txt
+          else
+            echo "Getting commits since ${LATEST}..."
+            echo "### Changes since ${LATEST}" >> release_notes.txt
+            echo "" >> release_notes.txt
+            git log ${LATEST}..HEAD --pretty=format:"- %s" >> release_notes.txt
+          fi
+          
+          echo "Release notes generated:"
+          cat release_notes.txt
+
+      # Step 8: Create GitHub Release for major/minor updates
+      - name: Create GitHub Release
+        if: env.MAKE_RELEASE == 'true' && env.PROCEED == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
+          body_path: release_notes.txt
+          draft: false
+          prerelease: false
