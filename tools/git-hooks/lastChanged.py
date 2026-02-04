@@ -1,9 +1,78 @@
 #!/usr/bin/env python3
+"""
+===============================================================================
+Git pre-commit hook helper: last-changed.py
+===============================================================================
+
+This script updates (or inserts) a timestamp header at the top of staged
+C/C++ source and header files, in the form:
+
+    /*** Last Changed: YYYY-MM-DD - HH:MM ***/
+
+It is intended to be executed automatically as a Git *pre-commit hook*.
+Running it manually is possible, but it will only act on *staged* files.
+
+-------------------------------------------------------------------------------
+INSTALLATION (required once per clone)
+-------------------------------------------------------------------------------
+
+Git does NOT automatically run scripts in this directory.
+You must explicitly tell Git to use this folder for hooks.
+
+From the repository root, run:
+
+    git config core.hooksPath tools/git-hooks
+
+This config is local to the repository and must be set per clone.
+
+-------------------------------------------------------------------------------
+PRE-COMMIT HOOK SETUP
+-------------------------------------------------------------------------------
+
+Ensure there is a file named exactly 'pre-commit' (no extension) in this
+directory, with the following contents:
+
+    #!/bin/sh
+    python3 tools/git-hooks/last-changed.py
+
+And make it executable:
+
+    chmod +x tools/git-hooks/pre-commit
+    chmod +x tools/git-hooks/last-changed.py
+
+-------------------------------------------------------------------------------
+HOW IT WORKS
+-------------------------------------------------------------------------------
+
+- Git stages files first (via CLI or GUI like VSCode / PlatformIO)
+- Git runs the pre-commit hook
+- This script:
+    - inspects ONLY staged files
+    - updates matching .cpp/.h files
+    - re-stages modified files automatically
+
+If no staged files are found, the script exits quietly.
+
+-------------------------------------------------------------------------------
+NOTES
+-------------------------------------------------------------------------------
+
+- This script is designed to run during 'git commit'
+- It will not modify unstaged files
+- GUI commits (VSCode, PlatformIO) work as long as hooks are enabled
+- Hooks are skipped if Git is invoked with '--no-verify'
+
+===============================================================================
+"""
+
 import subprocess
 import datetime
+import sys
 import re
 from pathlib import Path
 from typing import Optional, List
+
+print("HOOK RUNNING (pre-commit)", file=sys.stderr, flush=True)
 
 # =========================
 # Config
@@ -126,6 +195,11 @@ if res.returncode != 0:
     raise SystemExit(1)
 
 staged_rel = [Path(p) for p in res.stdout.splitlines() if p.strip()]
+
+# 🔒 Guard: niets staged → waarschijnlijk handmatig gerund
+if not staged_rel:
+    print("last-changed: no staged files (this hook runs during commit)", file=sys.stderr)
+    raise SystemExit(0)
 
 # Selecteer staged cpp/h op basis van config mappen
 staged_cpp_rel = [

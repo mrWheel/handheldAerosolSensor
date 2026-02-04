@@ -5,7 +5,7 @@ This project is a **battery-powered, low-power air quality monitor** based on:
 - **Arduino Nano (ATmega328P)**
 - **Sensirion SPS30** particulate matter sensor (I²C)
 - **1.54" black/white e‑paper display (200×200)**
-- **High-side power latch** using a P‑channel MOSFET + 2N7000
+- **High-side power latch** using a P‑channel MOSFET + 2N7000 or BSS138
 - **Single-cell Li‑ion (18650)** battery with DC/DC boost to 5 V
 
 The system powers itself on with a button, performs a measurement cycle, updates the e‑paper display, and then **fully powers itself off** to achieve near-zero standby current.
@@ -45,18 +45,30 @@ The system powers itself on with a button, performs a measurement cycle, updates
 
 ### Arduino Nano
 
-| Function | Pin |
-|--------|-----|
-| Power latch control | D4 |
-| E‑paper CS | D10 |
-| E‑paper DC | D9 |
-| E‑paper RST | D8 |
-| E‑paper BUSY | D7 |
-| SPI MOSI | D11 |
-| SPI SCK | D13 |
-| Battery ADC | A0 |
-| I²C SDA | A4 |
-| I²C SCL | A5 |
+| Nano pin | ATmega328P | Standaard functie | AirosolSensor | Opmerking |
+|-----------|---------|-----------|-----------------------|-------------------------------------|
+| D2 | PD2 | INT0 | GPIO_PIN_LATCH | - |
+| D3 | PD3 | INT1 / PWM | GPIO_PIN_SWITCH | - |
+| D4 | PD4 | Digital | Vrij | - |
+| D5 | PD5 | PWM | Vrij | - |
+| D6 | PD6 | PWM | Vrij | - |
+| D7 | PD7 | Digital | GPIO_PIN_EPD_BUSY | e-paper BUSY |
+| D8 | PB0 | Digital | GPIO_PIN_EPD_RST | e-paper RST |
+| D9 | PB1 | PWM | Gebruikt | e-paper DC |
+| D10 | PB2 | SPI SS / PWM | GPIO_PIN_EPD_CS | e-paper CS |
+| D11 | PB3 | SPI MOSI | GPIO_PIN_EPD_MOSI | Hardware SPI MOSI (vast voor e-paper) |
+| D12 | PB4 | SPI MISO | GPIO_PIN_EPD_MISO | E-paper gebruikt vaak geen MISO; mag vrij blijven |
+| D13 | PB5 | SPI SCK + LED | GPIO_PIN_EPD_SCK | SCK voor e-paper; LED_BUILTIN zit hier ook |
+| A0 (D14)| PC0 | ADC0 | GPIO_PIN_BAT_ADC | Batterij/2 |
+| A1 (D15)| PC1 | ADC1 | Vrij | - |
+| A2 (D16)| PC2 | ADC2 | Vrij | - |
+| A3 (D17)| PC3 | ADC3 | Vrij | - |
+| A4 (D18)| PC4 | I²C SDA | GPIO_PIN_SPS30_SDA | SPS30 SDA |
+| A5 (D19)| PC5 | I²C SCL | GPIO_PIN_SPS30_SCL | SPS30 SCL |
+| A6 | ADC6 | Analog in | Vrij | Alleen analogRead, géén digital |
+| A7 | ADC7 | Analog in | Vrij | Alleen analogRead, géén digital |
+
+
 
 ### Battery Measurement
 
@@ -73,6 +85,7 @@ The system powers itself on with a button, performs a measurement cycle, updates
   - GxEPD2
   - Adafruit GFX
   - Sensirion SPS30 (GitHub)
+  - safeTimers
 
 ---
 
@@ -88,10 +101,30 @@ upload_protocol = arduino
 upload_speed = 57600   ; use 115200 for new bootloader
 monitor_speed = 115200
 
+build_flags =
+  -D GPIO_PIN_LATCH=2
+  -D GPIO_PIN_SWITCH=3
+  -D GPIO_PIN_BAT_ADC=A0
+  -D GPIO_PIN_SPS30_SDA=A4
+  -D GPIO_PIN_SPS30_SCL=A5 
+  -D GPIO_PIN_EPD_MOSI=11
+  -D GPIO_PIN_EPD_MISO=12
+  -D GPIO_PIN_EPD_SCK=13
+  -D GPIO_PIN_EPD_CS=10
+  -D GPIO_PIN_EPD_DC=9
+  -D GPIO_PIN_EPD_RST=8
+  -D GPIO_PIN_EPD_BUSY=7 ; E-paper BUSY
+  -D WARMUP_SECONDS=4
+  -D MAX_METINGEN=3
+  -D ADC_VREF_VOLTAGE=5.0
+;  -D HAS_E_PAPER_DISPLAY
+
 lib_deps =
   zinggjm/GxEPD2@^1.6.5
   adafruit/Adafruit GFX Library@^1.11.9
   https://github.com/Sensirion/arduino-sps.git
+  https://github.com/mrWheel/safeTimers.git
+  
 ```
 
 ---

@@ -21,7 +21,7 @@ name: Auto Tag Release
 # Define environment variables at the workflow level
 env:
   PROGRAM_NAME: "luchtSensorHandheld"
-  PROGRAM_SRC: "luchtSensor.cpp"
+  PROGRAM_SRC: "main.cpp"
   PROGRAM_DIR: "src"
 
 # Run this workflow only when pushing to the main branch

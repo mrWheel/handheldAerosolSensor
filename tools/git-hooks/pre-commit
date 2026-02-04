@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+python3 tools/git-hooks/lastChanged.py
+
+# Pak alleen staged bestanden (added/copied/modified)
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|h)$' || true)
+
+if [ -n "$FILES" ]; then
+  echo "$FILES" | xargs clang-format -i
+  echo "$FILES" | xargs git add
+fi
