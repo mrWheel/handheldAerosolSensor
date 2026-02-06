@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-04 - 10:43 ***/
+/*** Last Changed: 2026-02-06 - 14:01 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -11,7 +11,7 @@
 
 #include <safeTimers.h>
 
-const char* PROG_VERSION = "v0.2.3";
+const char* PROG_VERSION = "v0.2.4";
 
 // ===================== User configuration =====================
 
@@ -64,8 +64,17 @@ DECLARE_TIMER_MS(tLongPress, switchLongPressMs, SKIP_MISSED_TICKS);
 static const uint16_t MAX_DISPLAY_BUFFER_SIZE = 800;
 static const uint16_t PAGE_HEIGHT = (MAX_DISPLAY_BUFFER_SIZE / (200 / 8)); // 32
 
-GxEPD2_BW<GxEPD2_154_D67, PAGE_HEIGHT> display(
-    GxEPD2_154_D67(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy));
+//-- Optie A:
+// GxEPD2_BW<GxEPD2_154, PAGE_HEIGHT> display(
+//  GxEPD2_154(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy)
+//);
+//-- Optie B: screen inits .. but nothing shows
+GxEPD2_BW<GxEPD2_154_T8, PAGE_HEIGHT> display(
+    GxEPD2_154_T8(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy));
+//-- Optie C: does not work
+// GxEPD2_BW<GxEPD2_154_D67, PAGE_HEIGHT> display(
+//    GxEPD2_154_D67(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy)
+//);
 
 // ===================== Air quality classification =====================
 
@@ -160,7 +169,10 @@ static bool hasPartialUpdate()
 
 static void epdResetAndInit()
 {
-  display.init(115200);
+  SPI.begin();
+  SPI.beginTransaction(SPISettings(250000, MSBFIRST, SPI_MODE0)); // 250 kHz
+
+  display.init(115200, true, 2, false);
   display.setRotation(1);
   display.setFullWindow();
 
@@ -169,6 +181,7 @@ static void epdResetAndInit()
   {
     display.fillScreen(GxEPD_WHITE);
   } while (display.nextPage());
+
 } // epdResetAndInit()
 
 static void drawHeader(const char* title)
@@ -229,11 +242,11 @@ static void showMessagePartial(const char* line1, const char* line2)
 
 static void showStatusLine(const char* text)
 {
-  if (hasPartialUpdate())
-  {
-    showMessagePartial(text, nullptr);
-  }
-  else
+  // if (hasPartialUpdate())
+  //{
+  //   showMessagePartial(text, nullptr);
+  // }
+  // else
   {
     showMessageFull(text, nullptr);
   }
@@ -243,15 +256,12 @@ static void showMeasurementProgress(uint8_t attempt, uint8_t total)
 {
   char line[32];
   snprintf(line, sizeof(line), "meting %u / %u", attempt, total);
-#ifdef HAS_E_PAPER_DISPLAY
   showStatusLine(line);
-#endif
   Serial.println(line);
 } // showMeasurementProgress()
 
 static void showResults(float pm1, float pm25, float pm10, float vbat, uint8_t pct, AirStatus st, uint8_t validCount, uint8_t attempts)
 {
-#ifdef HAS_E_PAPER_DISPLAY
   display.setFullWindow();
 
   display.firstPage();
@@ -291,7 +301,6 @@ static void showResults(float pm1, float pm25, float pm10, float vbat, uint8_t p
     display.print(attempts);
     display.print(" valid");
   } while (display.nextPage());
-#endif
 
   Serial.println("\n------------- Results -------------\n");
   Serial.print("BAT: ");
@@ -320,7 +329,6 @@ static void showResults(float pm1, float pm25, float pm10, float vbat, uint8_t p
 
 static void showError(const char* line1, const char* line2)
 {
-#ifdef HAS_E_PAPER_DISPLAY
   display.setFullWindow();
 
   display.firstPage();
@@ -339,7 +347,6 @@ static void showError(const char* line1, const char* line2)
       display.print(line2);
     }
   } while (display.nextPage());
-#endif
 
   Serial.print("ERROR: ");
   Serial.print(line1);
@@ -526,6 +533,10 @@ void setup()
   pinMode(pinLatch, OUTPUT);
   digitalWrite(pinLatch, HIGH);
 
+  Serial.begin(115200);
+  delay(20);
+  Serial.flush();
+
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(pinSwitch, INPUT_PULLUP);
 
@@ -535,8 +546,19 @@ void setup()
   delayMicroseconds(50);
   uint16_t raw = analogRead(pinBatAdc);
 
-  Serial.begin(115200);
+  pinMode(6, OUTPUT);
+  digitalWrite(6, LOW); // shifter uit (Hi-Z) tijdens boot
+
+  delay(20);             // rails even stabiliseren
+  digitalWrite(6, HIGH); // shifter aan
+
+  pinMode(pinEpdCs, OUTPUT);
+  digitalWrite(pinEpdCs, HIGH);
+  pinMode(pinEpdBusy, INPUT_PULLUP);
   delay(20);
+  Serial.print(F("BUSY stable (idle) after 20ms:"));
+  Serial.flush();
+  Serial.println(digitalRead(pinEpdBusy));
   Serial.flush();
 
   Serial.println(F("\n\nAnd then it starts ...\n"));
@@ -558,14 +580,25 @@ void setup()
   analogReference(DEFAULT);
   delay(10);
 
-#ifdef HAS_E_PAPER_DISPLAY
   Serial.println(F("Initializing e-paper..."));
-  epdResetAndInit();
-#endif
+  pinMode(pinEpdBusy, INPUT);
+  Serial.print(F("BUSY (idle) before init: "));
+  Serial.println(digitalRead(pinEpdBusy));
 
-#ifdef HAS_E_PAPER_DISPLAY
+  pinMode(pinEpdRst, OUTPUT);
+  digitalWrite(pinEpdRst, LOW);
+  delay(10);
+  digitalWrite(pinEpdRst, HIGH);
+  delay(10);
+
+  Serial.print(F("BUSY after manual reset pulse: "));
+  Serial.println(digitalRead(pinEpdBusy));
+
+  epdResetAndInit();
+  showMessageFull("HELLO", "e-paper test");
+  //  while(true) { delay(1000); }
+
   showMessageFull("power latched", nullptr);
-#endif
   Serial.println(F("Power latched."));
 
   if (!sps30InitAndStart())
@@ -578,9 +611,7 @@ void setup()
     warmupRemaining = warmupSeconds;
     warmupLastTickMs = millis();
 
-#ifdef HAS_E_PAPER_DISPLAY
     showMessageFull("power latched", "warming up...");
-#endif
     Serial.println("Warming up...");
     mainState = STATE_WARMUP;
   }
@@ -630,12 +661,10 @@ void loop()
       snprintf(line, sizeof(line), "warming up: %us", warmupRemaining);
       Serial.println(line);
 
-#ifdef HAS_E_PAPER_DISPLAY
       if (hasPartialUpdate())
         showMessagePartial(line, nullptr);
       else
         showMessageFull(line, nullptr);
-#endif
     }
     break;
   }
