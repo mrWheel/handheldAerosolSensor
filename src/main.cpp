@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-06 - 14:02 ***/
+/*** Last Changed: 2026-02-06 - 14:03 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -11,7 +11,7 @@
 
 #include <safeTimers.h>
 
-const char* PROG_VERSION = "v0.2.5";
+const char* PROG_VERSION = "v1.0.0";
 
 // ===================== User configuration =====================
 
