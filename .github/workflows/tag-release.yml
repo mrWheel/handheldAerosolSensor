@@ -123,7 +123,11 @@ jobs:
 
             echo "Parsed version: $versionMajor.$versionMinor, latest: $latestMajor.$latestMinor"
 
-            if [ "$versionMajor" -gt "$latestMajor" ] || [ "$versionMajor" -eq "$latestMajor" -a "$versionMinor" -gt "$latestMinor" ]; then
+            # Treat major 0 as "always release" (SemVer: 0.y.z is unstable; any bump can be breaking)
+            if [ "$versionMajor" -eq 0 ]; then
+              echo "Major is 0. Any new version under v0.*.* will create a GitHub Release."
+              echo "MAKE_RELEASE=true" >> $GITHUB_ENV
+            elif [ "$versionMajor" -gt "$latestMajor" ] || [ "$versionMajor" -eq "$latestMajor" -a "$versionMinor" -gt "$latestMinor" ]; then
               echo "Major or minor version changed. A GitHub Release will be created."
               echo "MAKE_RELEASE=true" >> $GITHUB_ENV
             else

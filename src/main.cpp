@@ -1,55 +1,71 @@
-/*** Last Changed: 2026-02-06 - 14:04 ***/
+/*** Last Changed: 2026-02-07 - 14:01 ***/
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
+
+// — ESP32 radio control to disable WiFi/Bluetooth as early as possible
+#include <WiFi.h>
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 
 #include <sps30.h>
-
 #include <safeTimers.h>
 
-const char* PROG_VERSION = "v1.0.1";
+// — Program version string (keep manually updated with each release)
+static const char* progVersion = "v0.1.0";
 
-// ===================== User configuration =====================
+// ===================== User configuration (from build_flags) =====================
 
-// Latch control pin (drives the 2N7000 gate through a series resistor)
+// — Latch control pin (drives the 2N7000 gate through a series resistor)
 static const uint8_t pinLatch = GPIO_PIN_LATCH;
 
-// Pushbutton pin to release the latch or do other things
+// — Pushbutton pin (LOW = pressed with INPUT_PULLUP)
 static const uint8_t pinSwitch = GPIO_PIN_SWITCH;
 
-// Battery divider ADC input (100k/100k => ADC sees Vbat/2)
+// — Battery divider ADC input (default math assumes 2:1 divider => ADC sees Vbat/2)
 static const uint8_t pinBatAdc = GPIO_PIN_BAT_ADC;
 
-// E-paper pins (SPI on Nano: MOSI=D11, SCK=D13 are fixed by hardware SPI)
+// — E-paper pins
+// — E-paper SPI pins (from build_flags)
+static const uint8_t pinEpdMosi = GPIO_PIN_EPD_MOSI;
+static const uint8_t pinEpdMiso = GPIO_PIN_EPD_MISO;
+static const uint8_t pinEpdSck = GPIO_PIN_EPD_SCK;
 static const uint8_t pinEpdCs = GPIO_PIN_EPD_CS;
 static const uint8_t pinEpdDc = GPIO_PIN_EPD_DC;
 static const uint8_t pinEpdRst = GPIO_PIN_EPD_RST;
 static const uint8_t pinEpdBusy = GPIO_PIN_EPD_BUSY;
 
-// Warm-up time after starting SPS30 measurement
+// — SPS30 I2C pins
+static const uint8_t pinSps30Sda = GPIO_PIN_SPS30_SDA;
+static const uint8_t pinSps30Scl = GPIO_PIN_SPS30_SCL;
+
+// — Warm-up time after starting SPS30 measurement
 static const uint16_t warmupSeconds = WARMUP_SECONDS;
 
-// Maximum number of measurement attempts (only valid reads are averaged)
+// — Maximum number of measurement attempts (only valid reads are averaged)
 static const uint8_t maxMetingen = MAX_METINGEN;
 
-// ADC reference voltage (Nano uses Vcc as AREF by default; in your case this is the boosted 5V rail)
+// — ADC reference voltage used for battery math (calibrate for best accuracy)
 static const float adcVref = (float)ADC_VREF_VOLTAGE;
 
-// Timing (non-blocking)
+// ===================== Timing (safeTimers) =====================
+
+// — UI + sampling cadence
 static const uint32_t warmupTickMs = 1000UL;
 static const uint32_t sampleIntervalMs = 1000UL;
 static const uint32_t sps30AttemptTimeoutMs = 7000UL;
 static const uint32_t sps30PollIntervalMs = 100UL;
 
-// Switch handling
+// — Switch handling
 static const uint32_t switchDebounceMs = 30UL;
 static const uint32_t switchLongPressMs = 5000UL;
 
-// ---- safeTimers ----
+// — safeTimers declarations
 DECLARE_TIMER_MS(tWarmupTick, warmupTickMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tSampleInterval, sampleIntervalMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tAttemptTimeout, sps30AttemptTimeoutMs, SKIP_MISSED_TICKS);
@@ -59,22 +75,59 @@ DECLARE_TIMER_MS(tSwitchDebounce, switchDebounceMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tLongPress, switchLongPressMs, SKIP_MISSED_TICKS);
 
 // ===================== Display selection =====================
-//
-// 1.54" 200x200 B/W "D67"
-static const uint16_t MAX_DISPLAY_BUFFER_SIZE = 800;
-static const uint16_t PAGE_HEIGHT = (MAX_DISPLAY_BUFFER_SIZE / (200 / 8)); // 32
 
-//-- Optie A:
-// GxEPD2_BW<GxEPD2_154, PAGE_HEIGHT> display(
-//  GxEPD2_154(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy)
+// — 1.54" 200x200 B/W display; page buffer sizing
+//-x-static const uint16_t maxDisplayBufferSize = 800;
+static const uint16_t pageHeight = 200; //(maxDisplayBufferSize / (200 / 8));
+
+// — Display driver instance
+//-- GxEPD2_BW<GxEPD2_154, pageHeight> display(...);
+GxEPD2_BW<GxEPD2_154, pageHeight> display(
+    GxEPD2_154(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy));
+// GxEPD2_BW<GxEPD2_154_T8, pageHeight> display(
+//   GxEPD2_154_T8(pinEpdCs, pinEpdDc, pinEpdRst, -1) //pinEpdBusy)
 //);
-//-- Optie B: screen inits .. but nothing shows
-GxEPD2_BW<GxEPD2_154_T8, PAGE_HEIGHT> display(
-    GxEPD2_154_T8(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy));
-//-- Optie C: does not work
-// GxEPD2_BW<GxEPD2_154_D67, PAGE_HEIGHT> display(
-//    GxEPD2_154_D67(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy)
+// GxEPD2_BW<GxEPD2_154_D67, pageHeight> display(
+//   GxEPD2_154_D67(pinEpdCs, pinEpdDc, pinEpdRst, -1) // -1 = no pinEpdBusy)
 //);
+
+// ===================== Fixed layout coordinates =====================
+
+struct UiLayout
+{
+  int16_t xLabel;
+  int16_t xValue;
+
+  int16_t yTitle;
+
+  int16_t yBattery;
+  int16_t yPm1;
+  int16_t yPm25;
+  int16_t yPm10;
+
+  int16_t yMessage;
+};
+
+// — Fixed positions for TITLE, Battery, PM lines and message area
+static const UiLayout ui =
+    {
+        8,   // xLabel
+        86,  // xValue (values aligned)
+        24,  // yTitle baseline
+        52,  // yBattery baseline
+        84,  // yPm1 baseline
+        114, // yPm25 baseline
+        144, // yPm10 baseline
+        186  // yMessage baseline
+};
+
+// — Remember last text per field to avoid unnecessary redraws
+static String titleText;
+static String batteryText;
+static String pm1Text;
+static String pm25Text;
+static String pm10Text;
+static String messageText;
 
 // ===================== Air quality classification =====================
 
@@ -98,7 +151,7 @@ static AirStatus classifyPm25(float pm25)
   }
 
   return STATUS_EXTREEM;
-} // classifyPm25()
+}
 
 static const char* statusText(AirStatus s)
 {
@@ -111,16 +164,39 @@ static const char* statusText(AirStatus s)
   default:
     return "EXTREEM";
   }
-} // statusText()
+}
+
+// ===================== ESP32 radio shutoff =====================
+
+static void disableRadiosAsap()
+{
+  // — Ensure Arduino WiFi is off
+  WiFi.mode(WIFI_OFF);
+  WiFi.disconnect(true);
+
+  // — Stop WiFi driver (ignore errors if not started yet)
+  (void)esp_wifi_stop();
+  (void)esp_wifi_deinit();
+
+  // — Stop Bluetooth controller if present
+  btStop();
+  (void)esp_bt_controller_disable();
+  (void)esp_bt_controller_deinit();
+}
 
 // ===================== Battery reading =====================
 
 static float readBatteryVoltage()
 {
-  uint16_t raw = analogRead(pinBatAdc);
-  float vAdc = (raw * adcVref) / 1023.0f;
+  // — ESP32 ADC is 12-bit by default (0..4095) when analogReadResolution(12) is used
+  uint16_t raw = (uint16_t)analogRead(pinBatAdc);
+
+  // — Convert ADC reading to voltage at the ADC pin
+  float vAdc = ((float)raw * adcVref) / 4095.0f;
+
+  // — Default assumes a 2:1 divider (ADC sees Vbat/2)
   return vAdc * 2.0f;
-} // readBatteryVoltage()
+}
 
 static uint8_t batteryPercentFromVoltage(float vbat)
 {
@@ -138,308 +214,368 @@ static uint8_t batteryPercentFromVoltage(float vbat)
   {
     float x = (vbat - 3.70f) * (50.0f / 0.50f);
     int p = (int)(50.0f + x);
+
     if (p > 100)
     {
       p = 100;
     }
+
     return (uint8_t)p;
   }
   else
   {
     float x = (vbat - 3.20f) * (50.0f / 0.50f);
     int p = (int)x;
+
     if (p < 0)
     {
       p = 0;
     }
+
     return (uint8_t)p;
   }
-} // batteryPercentFromVoltage()
+}
 
-// ===================== E-paper helpers =====================
+static String formatBatteryLine(float vbat, uint8_t pct)
+{
+  // — Format battery line using snprintf then convert to String
+  char buf[48];
+
+  // — Example: "4.02V 78%"
+  snprintf(buf, sizeof(buf), "%.2fV %u%%", vbat, pct);
+
+  return String(buf);
+}
+
+// ===================== E-paper helpers (fixed-layout fields) =====================
 
 static bool hasPartialUpdate()
 {
-#if defined(GxEPD2_HAS_FAST_PARTIAL_UPDATE)
+  // — GxEPD2 provides this member; partial update support depends on panel/driver
   return display.epd2.hasFastPartialUpdate;
-#else
-  return display.epd2.hasFastPartialUpdate;
-#endif
-} // hasPartialUpdate()
+}
 
-static void epdResetAndInit()
+static void epdSmokeTest()
 {
-  SPI.begin();
-  SPI.beginTransaction(SPISettings(250000, MSBFIRST, SPI_MODE0)); // 250 kHz
+  Serial.printf("EPD smoke test: begin\n");
 
+  Serial.printf("EPD setFullWindow()\n");
+  display.setFullWindow();
+
+  Serial.printf("EPD firstPage()\n");
+  display.firstPage();
+
+  Serial.printf("EPD drawing page...\n");
+  display.fillScreen(GxEPD_WHITE);
+  display.drawRect(0, 0, display.width(), display.height(), GxEPD_BLACK);
+
+  Serial.printf("EPD nextPage() (this may block)\n");
+  bool more = display.nextPage();
+
+  Serial.printf("EPD nextPage returned: %d\n", more ? 1 : 0);
+  Serial.printf("EPD smoke test: done\n");
+
+} // epdSmokeTest()
+
+static void epdInit()
+{
+  // — Configure control pins
+  pinMode(pinEpdCs, OUTPUT);
+  digitalWrite(pinEpdCs, HIGH);
+
+  pinMode(pinEpdDc, OUTPUT);
+  digitalWrite(pinEpdDc, LOW);
+
+  pinMode(pinEpdRst, OUTPUT);
+  digitalWrite(pinEpdRst, HIGH);
+
+  // — BUSY input with pull-up (board is open drain)
+  pinMode(pinEpdBusy, INPUT_PULLUP);
+
+  // — Map SPI pins explicitly (MISO may be -1)
+  SPI.begin(pinEpdSck, pinEpdMiso, pinEpdMosi, pinEpdCs);
+
+  // — Manual reset pulse (some boards need this)
+  digitalWrite(pinEpdRst, LOW);
+  delay(20);
+  digitalWrite(pinEpdRst, HIGH);
+  delay(50);
+
+  // — Log BUSY around init
+  Serial.printf("EPD BUSY before init: %d\n", digitalRead(pinEpdBusy));
+
+  // — Init display (GxEPD2 controls SPI transactions internally)
   display.init(115200, true, 2, false);
+
+  // — Reduce SPI speed for long dupont wires (very common ESP32 issue)
+  //-x-display.epd2.setSPISpeed(4000000);
+
+  Serial.printf("EPD init returned\n");
+
   display.setRotation(1);
-  display.setFullWindow();
-
-  display.firstPage();
-  do
-  {
-    display.fillScreen(GxEPD_WHITE);
-  } while (display.nextPage());
-
-} // epdResetAndInit()
-
-static void drawHeader(const char* title)
-{
   display.setTextColor(GxEPD_BLACK);
-
-  display.setFont(&FreeMonoBold12pt7b);
-  display.setCursor(10, 25);
-  display.print(title);
-
-  display.setFont(&FreeMonoBold9pt7b);
-} // drawHeader()
-
-static void showMessageFull(const char* line1, const char* line2)
-{
   display.setFullWindow();
 
-  display.firstPage();
-  do
-  {
-    display.fillScreen(GxEPD_WHITE);
+} // epdInit()
 
-    drawHeader("AIR MONITOR");
-
-    display.setCursor(10, 60);
-    display.print(line1);
-
-    if (line2 != nullptr)
-    {
-      display.setCursor(10, 85);
-      display.print(line2);
-    }
-  } while (display.nextPage());
-} // showMessageFull()
-
-static void showMessagePartial(const char* line1, const char* line2)
+static void drawStaticLayout()
 {
-  display.setPartialWindow(0, 40, display.width(), display.height() - 40);
-
+  // — Draw all static labels and frame once (full refresh)
+  display.setFullWindow();
   display.firstPage();
   do
   {
     display.fillScreen(GxEPD_WHITE);
+
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(ui.xLabel, ui.yTitle);
+    display.print("TITLE");
 
     display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(ui.xLabel, ui.yBattery);
+    display.print("BAT:");
+
+    display.setCursor(ui.xLabel, ui.yPm1);
+    display.print("PM1.0:");
+
+    display.setCursor(ui.xLabel, ui.yPm25);
+    display.print("PM2.5:");
+
+    display.setCursor(ui.xLabel, ui.yPm10);
+    display.print("PM10 :");
+
+    display.setCursor(ui.xLabel, ui.yMessage);
+    display.print("MSG :");
+  } while (display.nextPage());
+
+  Serial.printf("EPD smoke test loop exited\n");
+
+} // drawStaticLayout()
+
+static void drawValueAt(int16_t yBaseline, const String& text)
+{
+  // — Draw a value at the fixed value column for the given baseline
+  display.setCursor(ui.xValue, yBaseline);
+  display.print(text);
+}
+
+static void clearValueBand(int16_t yBaseline, int16_t bandHeight)
+{
+  // — Clear the value area to the right of labels in a band around the baseline
+  int16_t x = ui.xValue;
+  int16_t y = yBaseline - bandHeight + 2;
+  int16_t w = display.width() - ui.xValue;
+  int16_t h = bandHeight + 4;
+
+  display.fillRect(x, y, w, h, GxEPD_WHITE);
+}
+
+static void updateFieldBand(int16_t yBaseline, int16_t bandHeight, const String& newText, String& cache)
+{
+  // — Skip redraw when nothing changed
+  if (newText == cache)
+  {
+    return;
+  }
+
+  cache = newText;
+
+  // — Use partial update if supported; otherwise full window update
+  if (hasPartialUpdate())
+  {
+    int16_t x = 0;
+    int16_t y = yBaseline - bandHeight + 2;
+    int16_t w = display.width();
+    int16_t h = bandHeight + 6;
+
+    display.setPartialWindow(x, y, w, h);
+  }
+  else
+  {
+    display.setFullWindow();
+  }
+
+  display.firstPage();
+  do
+  {
+    // — Clear only the value band
+    clearValueBand(yBaseline, bandHeight);
+
+    // — Draw updated value text
+    display.setFont(&FreeMonoBold9pt7b);
     display.setTextColor(GxEPD_BLACK);
-
-    display.setCursor(10, 60);
-    display.print(line1);
-
-    if (line2 != nullptr)
-    {
-      display.setCursor(10, 85);
-      display.print(line2);
-    }
+    drawValueAt(yBaseline, newText);
   } while (display.nextPage());
-} // showMessagePartial()
+}
 
-static void showStatusLine(const char* text)
+static void setTitle(const String& t)
 {
-  // if (hasPartialUpdate())
-  //{
-  //   showMessagePartial(text, nullptr);
-  // }
-  // else
+  // — Title uses larger font, so we update it with its own band height
+  if (t == titleText)
   {
-    showMessageFull(text, nullptr);
+    return;
   }
-} // showStatusLine()
 
-static void showMeasurementProgress(uint8_t attempt, uint8_t total)
-{
-  char line[32];
-  snprintf(line, sizeof(line), "meting %u / %u", attempt, total);
-  showStatusLine(line);
-  Serial.println(line);
-} // showMeasurementProgress()
+  titleText = t;
 
-static void showResults(float pm1, float pm25, float pm10, float vbat, uint8_t pct, AirStatus st, uint8_t validCount, uint8_t attempts)
-{
-  display.setFullWindow();
+  // — Update title band (larger)
+  if (hasPartialUpdate())
+  {
+    display.setPartialWindow(0, 0, display.width(), 40);
+  }
+  else
+  {
+    display.setFullWindow();
+  }
 
   display.firstPage();
   do
   {
-    display.fillScreen(GxEPD_WHITE);
+    // — Clear title value area (to the right of "TITLE")
+    display.fillRect(ui.xValue, 0, display.width() - ui.xValue, 40, GxEPD_WHITE);
 
-    drawHeader("RESULTAAT");
-
-    display.setCursor(10, 50);
-    display.print("BAT: ");
-    display.print(vbat, 2);
-    display.print("V ");
-    display.print(pct);
-    display.print("%");
-
-    display.setCursor(10, 75);
-    display.print("STATUS: ");
-    display.print(statusText(st));
-
-    display.setCursor(10, 105);
-    display.print("PM1.0: ");
-    display.print(pm1, 1);
-
-    display.setCursor(10, 130);
-    display.print("PM2.5: ");
-    display.print(pm25, 1);
-
-    display.setCursor(10, 155);
-    display.print("PM10 : ");
-    display.print(pm10, 1);
-
-    display.setCursor(10, 185);
-    display.print("avg: ");
-    display.print(validCount);
-    display.print("/");
-    display.print(attempts);
-    display.print(" valid");
+    // — Render title value
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(ui.xValue, ui.yTitle);
+    display.print(t);
   } while (display.nextPage());
+}
 
-  Serial.println("\n------------- Results -------------\n");
-  Serial.print("BAT: ");
-  Serial.print(vbat, 2);
-  Serial.print(" V ");
-  Serial.print(pct);
-  Serial.println("%");
-
-  Serial.print("STATUS: ");
-  Serial.println(statusText(st));
-
-  Serial.print("PM1.0: ");
-  Serial.println(pm1, 1);
-  Serial.print("PM2.5: ");
-  Serial.println(pm25, 1);
-  Serial.print("PM10 : ");
-  Serial.println(pm10, 1);
-
-  Serial.print("avg: ");
-  Serial.print(validCount);
-  Serial.print(" / ");
-  Serial.println(attempts);
-  Serial.println(" valid samples");
-
-} // showResults()
-
-static void showError(const char* line1, const char* line2)
+static void setBatteryText(const String& t)
 {
-  display.setFullWindow();
+  // — Battery line fits in a 24px band with 9pt font
+  updateFieldBand(ui.yBattery, 22, t, batteryText);
+}
 
-  display.firstPage();
-  do
-  {
-    display.fillScreen(GxEPD_WHITE);
+static void setPm1Text(const String& t)
+{
+  // — PM1 line fits in a 24px band
+  updateFieldBand(ui.yPm1, 22, t, pm1Text);
+}
 
-    drawHeader("ERROR");
+static void setPm25Text(const String& t)
+{
+  // — PM2.5 line fits in a 24px band
+  updateFieldBand(ui.yPm25, 22, t, pm25Text);
+}
 
-    display.setCursor(10, 70);
-    display.print(line1);
+static void setPm10Text(const String& t)
+{
+  // — PM10 line fits in a 24px band
+  updateFieldBand(ui.yPm10, 22, t, pm10Text);
+}
 
-    if (line2 != nullptr)
-    {
-      display.setCursor(10, 95);
-      display.print(line2);
-    }
-  } while (display.nextPage());
-
-  Serial.print("ERROR: ");
-  Serial.print(line1);
-  if (line2 != nullptr)
-  {
-    Serial.print(" / ");
-    Serial.print(line2);
-  }
-  Serial.println();
-
-} // showError()
+static void setMessageText(const String& t)
+{
+  // — Message line fits in a 24px band
+  updateFieldBand(ui.yMessage, 22, t, messageText);
+}
 
 // ===================== SPS30 helpers =====================
 
 static bool sps30InitAndStart()
 {
-  //-- GPIO_PIN_SPS30_SDA, GPIO_PIN_SPS30_SCL
-  Wire.begin();
+  // — Initialize I2C on explicit pins
+  Wire.begin(pinSps30Sda, pinSps30Scl);
 
+  // — Probe sensor
   if (sps30_probe() != 0)
   {
     return false;
   }
 
+  // — Start measurement mode
   if (sps30_start_measurement() != 0)
   {
     return false;
   }
 
   return true;
-
-} // sps30InitAndStart()
+}
 
 static void sps30Stop()
 {
+  // — Stop measurement to reduce power
   (void)sps30_stop_measurement();
-
-} // sps30Stop()
+}
 
 static bool isValidSample(float pm1, float pm25, float pm10)
 {
+  // — Reject NaN/Inf
   if (!isfinite(pm1) || !isfinite(pm25) || !isfinite(pm10))
   {
     return false;
   }
 
+  // — Reject negative values
   if (pm1 < 0.0f || pm25 < 0.0f || pm10 < 0.0f)
   {
     return false;
   }
 
+  // — Reject obviously out-of-range values
   if (pm1 > 2000.0f || pm25 > 2000.0f || pm10 > 2000.0f)
   {
     return false;
   }
 
   return true;
-} // isValidSample()
+}
+
+static String formatPmLine(float v)
+{
+  // — Format PM value as "123.4"
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%.1f", v);
+  return String(buf);
+}
+
+static String formatAvgLine(float v, const char* suffix)
+{
+  // — Format average line as "123.4 <suffix>" (e.g. "12.3 AVG")
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%.1f %s", v, suffix);
+  return String(buf);
+}
 
 // ===================== Power off =====================
 
-void switchOff()
+static void updateBatteryNow(const char* reason)
 {
+  // — Read and render battery line immediately
   float vbat = readBatteryVoltage();
   uint8_t pct = batteryPercentFromVoltage(vbat);
 
-  Serial.print(F("Battery voltage: "));
-  Serial.print(vbat, 2);
-  Serial.print(F(" V ("));
-  Serial.print(pct);
-  Serial.println(F("%)"));
+  // — Update display battery field
+  setBatteryText(formatBatteryLine(vbat, pct));
 
-  Serial.println(F("Switching off..."));
+  // — Log battery status
+  Serial.printf("Battery (%s): %.2f V (%u%%)\n", reason, vbat, pct);
+}
+
+static void switchOff()
+{
+  // — Update battery reading right before unlatching power
+  updateBatteryNow("pre-off");
+
+  // — Update message on display before switching off
+  setMessageText("Switching off...");
+
+  // — Log and flush
+  Serial.printf("Switching off latch (PIN %u)\n", pinLatch);
   Serial.flush();
 
-  for (int i = 0; i < 5; i++)
-  {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(250);
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(1250);
-  }
-
+  // — Release the latch (hardware should cut power)
   digitalWrite(pinLatch, LOW);
 
+  // — Fallback loop if power does not drop (debug aid)
   while (true)
   {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(100);
-    digitalWrite(LED_BUILTIN, LOW);
     delay(100);
   }
-} // switchOff()
+}
 
 // ===================== Non-blocking state machine =====================
 
@@ -456,45 +592,38 @@ enum MainState
 
 static MainState mainState = STATE_WARMUP;
 
-// Warmup
+// — Warmup remaining seconds
 static uint16_t warmupRemaining = 0;
-static uint32_t warmupLastTickMs = 0;
 
-// Measurement accumulation
+// — Measurement accumulation
 static float sumPm1 = 0.0f;
 static float sumPm25 = 0.0f;
 static float sumPm10 = 0.0f;
 static uint8_t validCount = 0;
 static uint8_t attemptIndex = 0;
 
-// Attempt timing
-static uint32_t attemptStartMs = 0;
-static uint32_t lastPollMs = 0;
-static uint32_t nextSampleDueMs = 0;
-
-// Results data
+// — Results data
 static float avgPm1 = 0.0f;
 static float avgPm25 = 0.0f;
 static float avgPm10 = 0.0f;
 
-// Switch tracking
+// — Switch tracking
 static bool switchStableState = HIGH;
 static bool switchLastReading = HIGH;
-//-x-static uint32_t switchLastChangeMs = 0;
-//-x-static uint32_t switchPressStartMs = 0;
 
 static void updateSwitch()
 {
+  // — Read switch with pull-up logic (LOW means pressed)
   bool reading = (digitalRead(pinSwitch) == LOW) ? LOW : HIGH;
 
-  // Edge detect: zodra reading verandert, start debounce-timer opnieuw
+  // — On edge change, restart debounce timer
   if (reading != switchLastReading)
   {
     switchLastReading = reading;
     RESTART_TIMER(tSwitchDebounce);
   }
 
-  // Als debounce-tijd voorbij is, accepteer de nieuwe stabiele state
+  // — When debounce expires, accept new stable state
   if (DUE(tSwitchDebounce))
   {
     if (switchStableState != switchLastReading)
@@ -503,131 +632,164 @@ static void updateSwitch()
 
       if (switchStableState == LOW)
       {
-        // Press
-        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+        // — Press: start long-press timer
         RESTART_TIMER(tLongPress);
       }
       else
       {
-        // Release: geen long-press meer actief (optioneel: restart zodat 'ie niet meteen due kan zijn)
+        // — Release: restart long-press timer so it cannot instantly fire
         RESTART_TIMER(tLongPress);
       }
     }
   }
 
-  // Long-press detect (alleen terwijl knop ingedrukt blijft)
+  // — Long-press detection while held down
   if (switchStableState == LOW)
   {
     if (DUE(tLongPress))
     {
-      Serial.println(F("Long press detected -> switchOff()"));
+      Serial.printf("Long press detected -> switchOff()\n");
       switchOff();
     }
   }
-} // updateSwitch()
+}
 
 // ===================== Arduino entrypoints =====================
 
 void setup()
 {
+  // — Disable radios immediately to reduce current draw and RF noise
+  disableRadiosAsap();
+
+  // — Latch power immediately
   pinMode(pinLatch, OUTPUT);
   digitalWrite(pinLatch, HIGH);
 
+  // — Start serial logging
   Serial.begin(115200);
   delay(20);
-  Serial.flush();
 
-  pinMode(LED_BUILTIN, OUTPUT);
+  // — Configure basic IO
   pinMode(pinSwitch, INPUT_PULLUP);
 
+  // — Configure ADC input and resolution
   pinMode(pinBatAdc, INPUT);
-  digitalWrite(pinBatAdc, LOW);
-  analogRead(pinBatAdc); // Discard first reading
-  delayMicroseconds(50);
-  uint16_t raw = analogRead(pinBatAdc);
+  analogReadResolution(12);
 
-  pinMode(6, OUTPUT);
-  digitalWrite(6, LOW); // shifter uit (Hi-Z) tijdens boot
+  // — Discard first ADC read to settle
+  (void)analogRead(pinBatAdc);
 
-  delay(20);             // rails even stabiliseren
-  digitalWrite(6, HIGH); // shifter aan
+  // — Basic boot logs
+  Serial.printf("\n\nAnd then it starts ...\n\n");
+  Serial.printf("Firmware version: %s\n", progVersion);
+  Serial.printf("Warm-up time: %u seconds\n", (unsigned)warmupSeconds);
+  Serial.printf("Max measurements: %u\n", (unsigned)maxMetingen);
+  Serial.printf("PIN_LATCH: %u\n", (unsigned)pinLatch);
+  Serial.printf("PIN_SWITCH: %u\n", (unsigned)pinSwitch);
+  Serial.printf("PIN_BAT_ADC: %u\n", (unsigned)pinBatAdc);
+  Serial.printf("I2C SDA/SCL: %u/%u\n", (unsigned)pinSps30Sda, (unsigned)pinSps30Scl);
 
+  // — Prepare e-paper pins
   pinMode(pinEpdCs, OUTPUT);
   digitalWrite(pinEpdCs, HIGH);
+  // — Quick BUSY sanity check
+  // — BUSY level test with and without pull-up
+  pinMode(pinEpdBusy, INPUT);
+  delay(20);
+  Serial.printf("EPD BUSY (INPUT)        : %d\n", digitalRead(pinEpdBusy));
   pinMode(pinEpdBusy, INPUT_PULLUP);
   delay(20);
-  Serial.print(F("BUSY stable (idle) after 20ms:"));
-  Serial.flush();
-  Serial.println(digitalRead(pinEpdBusy));
-  Serial.flush();
+  Serial.printf("EPD BUSY (INPUT_PULLUP) : %d\n", digitalRead(pinEpdBusy));
 
-  Serial.println(F("\n\nAnd then it starts ...\n"));
-  Serial.print(F("Firmware version: "));
-  Serial.println(PROG_VERSION);
-  Serial.print(F("Warm-up time: "));
-  Serial.print(warmupSeconds);
-  Serial.println(F(" seconds"));
-  Serial.print(F("Max measurements: "));
-  Serial.println(maxMetingen);
-  Serial.print(F("PIN_LATCH: "));
-  Serial.println(pinLatch);
-  Serial.print(F("PIN_SWITCH: "));
-  Serial.println(pinSwitch);
-  Serial.print(F("PIN_BAT_ADC: "));
-  Serial.println(pinBatAdc);
-  Serial.flush();
-
-  analogReference(DEFAULT);
-  delay(10);
-
-  Serial.println(F("Initializing e-paper..."));
-  pinMode(pinEpdBusy, INPUT);
-  Serial.print(F("BUSY (idle) before init: "));
-  Serial.println(digitalRead(pinEpdBusy));
-
+  // — Hard reset display
   pinMode(pinEpdRst, OUTPUT);
   digitalWrite(pinEpdRst, LOW);
   delay(10);
   digitalWrite(pinEpdRst, HIGH);
   delay(10);
 
-  Serial.print(F("BUSY after manual reset pulse: "));
-  Serial.println(digitalRead(pinEpdBusy));
+  // — Sanity: toggle control pins so you can probe with a multimeter/logic probe
+  pinMode(pinEpdCs, OUTPUT);
+  pinMode(pinEpdDc, OUTPUT);
+  pinMode(pinEpdRst, OUTPUT);
 
-  epdResetAndInit();
-  showMessageFull("HELLO", "e-paper test");
-  //  while(true) { delay(1000); }
+  Serial.printf("Toggling CS/DC/RST...\n");
 
-  showMessageFull("power latched", nullptr);
-  Serial.println(F("Power latched."));
+  digitalWrite(pinEpdCs, HIGH);
+  digitalWrite(pinEpdDc, LOW);
+  digitalWrite(pinEpdRst, HIGH);
+  delay(100);
 
+  digitalWrite(pinEpdCs, LOW);
+  delay(50);
+  digitalWrite(pinEpdCs, HIGH);
+
+  digitalWrite(pinEpdDc, HIGH);
+  delay(50);
+  digitalWrite(pinEpdDc, LOW);
+
+  digitalWrite(pinEpdRst, LOW);
+  delay(50);
+  digitalWrite(pinEpdRst, HIGH);
+
+  Serial.printf("Toggle done\n");
+
+  // — Initialize e-paper
+  Serial.printf("Initializing e-paper...\n");
+  epdInit();
+
+  Serial.printf("Running epdSmokeTest()\n");
+  epdSmokeTest();
+
+  // — Draw fixed layout once
+  drawStaticLayout();
+
+  // — Initialize cached strings to something deterministic
+  titleText.reserve(32);
+  batteryText.reserve(32);
+  pm1Text.reserve(32);
+  pm25Text.reserve(32);
+  pm10Text.reserve(32);
+  messageText.reserve(64);
+
+  // — Set initial title value
+  setTitle("AIR MONITOR");
+
+  // — Read battery at boot and show it immediately
+  updateBatteryNow("boot");
+
+  // — Initialize PM fields to placeholders
+  setPm1Text("-");
+  setPm25Text("-");
+  setPm10Text("-");
+
+  // — Initialize SPS30 and decide state
   if (!sps30InitAndStart())
   {
-    showError("SPS30 not found", "check I2C wiring");
+    Serial.printf("ERROR: SPS30 not found\n");
+    setMessageText("ERROR: SPS30 missing");
     mainState = STATE_ERROR;
   }
   else
   {
     warmupRemaining = warmupSeconds;
-    warmupLastTickMs = millis();
-
-    showMessageFull("power latched", "warming up...");
-    Serial.println("Warming up...");
+    Serial.printf("SPS30 OK. Warming up...\n");
+    setMessageText("Warming up...");
     mainState = STATE_WARMUP;
   }
 
-  // ---- safeTimers: start deterministically (override initial random staggering) ----
+  // — Start timers deterministically
   RESTART_TIMER(tWarmupTick);
   RESTART_TIMER(tSampleInterval);
   RESTART_TIMER(tAttemptTimeout);
   RESTART_TIMER(tSpsPoll);
   RESTART_TIMER(tSwitchDebounce);
   RESTART_TIMER(tLongPress);
-  // Ensure known switch states
+
+  // — Initialize switch state tracking
   switchStableState = (digitalRead(pinSwitch) == LOW) ? LOW : HIGH;
   switchLastReading = switchStableState;
-
-} // setup()
+}
 
 void loop()
 {
@@ -639,33 +801,33 @@ void loop()
   {
     if (warmupRemaining == 0)
     {
+      // — Reset accumulation at end of warmup
       attemptIndex = 0;
       validCount = 0;
       sumPm1 = 0.0f;
       sumPm25 = 0.0f;
       sumPm10 = 0.0f;
 
-      // Start meetcyclus "clean" (zonder random offset)
+      // — Start measurement cycle cleanly
       RESTART_TIMER(tSampleInterval);
 
+      setMessageText("Measuring...");
       mainState = STATE_MEASURE_START_ATTEMPT;
       break;
     }
 
-    // 1Hz warmup tick
+    // — 1Hz warmup tick
     if (DUE(tWarmupTick))
     {
       warmupRemaining--;
 
-      char line[32];
-      snprintf(line, sizeof(line), "warming up: %us", warmupRemaining);
-      Serial.println(line);
+      // — Show warmup remaining seconds in message field
+      String msg = String("Warmup: ") + String((unsigned)warmupRemaining) + "s";
+      setMessageText(msg);
 
-      if (hasPartialUpdate())
-        showMessagePartial(line, nullptr);
-      else
-        showMessageFull(line, nullptr);
+      Serial.printf("Warmup remaining: %u s\n", (unsigned)warmupRemaining);
     }
+
     break;
   }
 
@@ -675,11 +837,13 @@ void loop()
     {
       if (validCount == 0)
       {
-        showError("no valid samples", "check sensor");
+        Serial.printf("ERROR: No valid samples\n");
+        setMessageText("ERROR: no valid samples");
         mainState = STATE_ERROR;
         break;
       }
 
+      // — Compute averages
       avgPm1 = sumPm1 / (float)validCount;
       avgPm25 = sumPm25 / (float)validCount;
       avgPm10 = sumPm10 / (float)validCount;
@@ -688,16 +852,23 @@ void loop()
       break;
     }
 
-    // Wacht tot volgende sample-slot
+    // — Wait until the next sample slot is due
     if (!DUE(tSampleInterval))
     {
       break;
     }
 
     attemptIndex++;
-    showMeasurementProgress(attemptIndex, maxMetingen);
 
-    // Start attempt timeout + polling deterministisch
+    // — Show attempt progress in message field
+    {
+      char buf[48];
+      snprintf(buf, sizeof(buf), "Sample %u/%u", (unsigned)attemptIndex, (unsigned)maxMetingen);
+      setMessageText(String(buf));
+      Serial.printf("%s\n", buf);
+    }
+
+    // — Start attempt timeout + polling deterministically
     RESTART_TIMER(tAttemptTimeout);
     RESTART_TIMER(tSpsPoll);
 
@@ -707,25 +878,27 @@ void loop()
 
   case STATE_MEASURE_POLL_READY:
   {
-    // Attempt timeout
+    // — Attempt timeout
     if (DUE(tAttemptTimeout))
     {
-      Serial.println("Attempt timeout (no data-ready).");
-      // Volgende attempt start pas bij volgende tSampleInterval tick
+      Serial.printf("Attempt timeout (no data-ready)\n");
+      setMessageText("Timeout: no data");
       mainState = STATE_MEASURE_WAIT_NEXT;
       break;
     }
 
-    // Poll niet sneller dan poll-interval
+    // — Poll not faster than poll interval
     if (!DUE(tSpsPoll))
     {
       break;
     }
 
     uint16_t ready = 0;
+
+    // — Read data-ready flag
     if (sps30_read_data_ready(&ready) != 0)
     {
-      // Keep polling until timeout
+      Serial.printf("WARN: sps30_read_data_ready() failed\n");
       break;
     }
 
@@ -735,9 +908,12 @@ void loop()
     }
 
     struct sps30_measurement m;
+
+    // — Read measurement
     if (sps30_read_measurement(&m) != 0)
     {
-      Serial.println("Read measurement failed.");
+      Serial.printf("WARN: sps30_read_measurement() failed\n");
+      setMessageText("Read failed");
       mainState = STATE_MEASURE_WAIT_NEXT;
       break;
     }
@@ -746,6 +922,15 @@ void loop()
     float pm25 = m.mc_2p5;
     float pm10 = m.mc_10p0;
 
+    // — Always show current measurement values on the fixed PM fields
+    setPm1Text(formatPmLine(pm1));
+    setPm25Text(formatPmLine(pm25));
+    setPm10Text(formatPmLine(pm10));
+
+    Serial.printf("Sample %u: PM1=%.1f  PM2.5=%.1f  PM10=%.1f\n",
+                  (unsigned)attemptIndex, pm1, pm25, pm10);
+
+    // — Validate and accumulate
     if (isValidSample(pm1, pm25, pm10))
     {
       sumPm1 += pm1;
@@ -753,45 +938,57 @@ void loop()
       sumPm10 += pm10;
       validCount++;
 
-      Serial.print(F("Valid sample: "));
-      Serial.print(pm1, 1);
-      Serial.print(F(" / "));
-      Serial.print(pm25, 1);
-      Serial.print(F(" / "));
-      Serial.println(pm10, 1);
+      // — Show valid counter in message field
+      {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "Valid: %u/%u", (unsigned)validCount, (unsigned)attemptIndex);
+        setMessageText(String(buf));
+      }
     }
     else
     {
-      Serial.println(F("Invalid sample rejected."));
+      Serial.printf("Invalid sample rejected\n");
+      setMessageText("Invalid sample");
     }
 
-    // We wachten nu op de volgende sample-interval tick
+    // — Wait for next sample slot
     mainState = STATE_MEASURE_WAIT_NEXT;
     break;
   }
 
   case STATE_MEASURE_WAIT_NEXT:
   {
-    // Niets te doen: STATE_MEASURE_START_ATTEMPT wacht op DUE(tSampleInterval)
+    // — No work; next loop returns to start attempt which waits on sample interval
     mainState = STATE_MEASURE_START_ATTEMPT;
     break;
   }
 
   case STATE_SHOW_RESULTS:
   {
-    float vbat = readBatteryVoltage();
-    uint8_t pct = batteryPercentFromVoltage(vbat);
-    AirStatus st = classifyPm25(avgPm25);
+    // — Show averages at the end (overwrite PM fields with "AVG" suffix)
+    setPm1Text(formatAvgLine(avgPm1, "AVG"));
+    setPm25Text(formatAvgLine(avgPm25, "AVG"));
+    setPm10Text(formatAvgLine(avgPm10, "AVG"));
 
-    showResults(avgPm1, avgPm25, avgPm10, vbat, pct, st, validCount, maxMetingen);
+    // — Show status derived from PM2.5 average
+    {
+      AirStatus st = classifyPm25(avgPm25);
+      String msg = String("Done: ") + String(statusText(st));
+      setMessageText(msg);
+      Serial.printf("Averages: PM1=%.1f  PM2.5=%.1f  PM10=%.1f  STATUS=%s\n",
+                    avgPm1, avgPm25, avgPm10, statusText(st));
+    }
 
+    // — Stop sensor before powering down
     sps30Stop();
+
     mainState = STATE_POWER_DOWN;
     break;
   }
 
   case STATE_ERROR:
   {
+    // — Stop sensor in error case too
     sps30Stop();
     mainState = STATE_POWER_DOWN;
     break;
@@ -804,4 +1001,4 @@ void loop()
     break;
   }
   }
-} // loop()
+}
