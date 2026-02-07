@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-07 - 14:22 ***/
+/*** Last Changed: 2026-02-07 - 14:26 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -16,7 +16,7 @@
 #include <safeTimers.h>
 
 // — Program version string (keep manually updated with each release)
-static const char* progVersion = "v0.2.1";
+static const char* progVersion = "v0.3.0";
 
 // ===================== User configuration (from build_flags) =====================
 
