@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-07 - 14:26 ***/
+/*** Last Changed: 2026-02-07 - 14:28 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -16,7 +16,7 @@
 #include <safeTimers.h>
 
 // — Program version string (keep manually updated with each release)
-static const char* progVersion = "v0.3.0";
+static const char* PROG_VERSION = "v0.2.2";
 
 // ===================== User configuration (from build_flags) =====================
 
@@ -756,7 +756,7 @@ void setup()
 
   // — Basic boot logs
   Serial.printf("\n\nAnd then it starts ...\n\n");
-  Serial.printf("Firmware version: %s\n", progVersion);
+  Serial.printf("Firmware version: %s\n", PROG_VERSION);
   Serial.printf("Warm-up time: %u seconds\n", (unsigned)warmupSeconds);
   Serial.printf("Max measurements: %u\n", (unsigned)maxMetingen);
   Serial.printf("PIN_LATCH: %u\n", (unsigned)pinLatch);
