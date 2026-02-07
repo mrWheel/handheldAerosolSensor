@@ -1,5 +1,4 @@
-/*** Last Changed: 2026-02-07 - 14:01 ***/
-
+/*** Last Changed: 2026-02-07 - 14:19 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -17,7 +16,7 @@
 #include <safeTimers.h>
 
 // — Program version string (keep manually updated with each release)
-static const char* progVersion = "v0.1.0";
+static const char* progVersion = "v0.1.1";
 
 // ===================== User configuration (from build_flags) =====================
 
@@ -248,6 +247,82 @@ static String formatBatteryLine(float vbat, uint8_t pct)
 }
 
 // ===================== E-paper helpers (fixed-layout fields) =====================
+static void epdGeometryTest()
+{
+  // — Print geometry and rotation
+  Serial.printf("EPD geometry: width=%d height=%d rotation=%d\n",
+                (int)display.width(),
+                (int)display.height(),
+                (int)display.getRotation());
+
+  // — Force full window to avoid partial artifacts
+  display.setFullWindow();
+
+  display.firstPage();
+  do
+  {
+    // — Clear screen
+    display.fillScreen(GxEPD_WHITE);
+
+    // — Draw outer border
+    display.drawRect(0, 0, display.width(), display.height(), GxEPD_BLACK);
+
+    // — Draw safe border inset (helps to see clipping)
+    display.drawRect(2, 2, display.width() - 4, display.height() - 4, GxEPD_BLACK);
+
+    // — Draw center crosshair
+    int16_t cx = display.width() / 2;
+    int16_t cy = display.height() / 2;
+    display.drawLine(cx, 0, cx, display.height() - 1, GxEPD_BLACK);
+    display.drawLine(0, cy, display.width() - 1, cy, GxEPD_BLACK);
+
+    // — Draw horizontal guide lines every 20px
+    for (int16_t y = 0; y < display.height(); y += 20)
+    {
+      display.drawLine(0, y, display.width() - 1, y, GxEPD_BLACK);
+    }
+
+    // — Print corners and size text
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+
+    // — Top-left
+    display.setCursor(2, 12);
+    display.print("TL (0,0)");
+
+    // — Top-right
+    {
+      String s = String("TR (") + String(display.width() - 1) + ",0)";
+      int16_t x = display.width() - (int16_t)(s.length() * 6) - 2;
+      if (x < 2)
+      {
+        x = 2;
+      }
+      display.setCursor(x, 12);
+      display.print(s);
+    }
+
+    // — Bottom-left (baseline must stay above bottom edge)
+    {
+      int16_t y = display.height() - 4;
+      display.setCursor(2, y);
+      display.print("BL (0,");
+      display.print(display.height() - 1);
+      display.print(")");
+    }
+
+    // — Size label in center
+    {
+      String s = String("W=") + String(display.width()) + " H=" + String(display.height());
+      display.setCursor(10, cy - 4);
+      display.print(s);
+    }
+
+  } while (display.nextPage());
+
+  Serial.printf("EPD geometry test drawn\n");
+
+} // epdGeometryTest()
 
 static bool hasPartialUpdate()
 {
@@ -737,6 +812,10 @@ void setup()
   // — Initialize e-paper
   Serial.printf("Initializing e-paper...\n");
   epdInit();
+
+  // — After epdInit()
+  epdGeometryTest();
+  delay(10000);
 
   Serial.printf("Running epdSmokeTest()\n");
   epdSmokeTest();
