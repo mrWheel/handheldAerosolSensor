@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-07 - 14:50 ***/
+/*** Last Changed: 2026-02-08 - 12:01 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -18,7 +18,7 @@
 //--Program version string (keep manually updated with each release)
 //-- NEVER CHANGE THIS const char* NAME
 //--             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.2.0";
+static const char* PROG_VERSION = "v0.3.0";
 //--             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -46,6 +46,31 @@ static const uint8_t pinEpdBusy = GPIO_PIN_EPD_BUSY;
 //--SPS30 I2C pins
 static const uint8_t pinSps30Sda = GPIO_PIN_SPS30_SDA;
 static const uint8_t pinSps30Scl = GPIO_PIN_SPS30_SCL;
+// — Use UART2 on remapped pins (ESP32 allows routing UART signals to most GPIOs)
+static const int8_t pinSpsUartTx = GPIO_PIN_SPS_UART_TX;
+static const int8_t pinSpsUartRx = GPIO_PIN_SPS_UART_RX;
+
+static HardwareSerial spsUart(2);
+
+static void sps30UartPassthroughInit()
+{
+  // — SPS30 UART: 115200 8N1
+  spsUart.begin(115200, SERIAL_8N1, pinSpsUartRx, pinSpsUartTx);
+
+  Serial.printf("SPS30 UART passthrough on UART2: RX=%d TX=%d\n",
+                (int)pinSpsUartRx, (int)pinSpsUartTx);
+
+} // sps30UartPassthroughInit()
+
+static void sps30UartPassthroughLoop()
+{
+  while (spsUart.available() > 0)
+  {
+    int c = spsUart.read();
+    Serial.write((uint8_t)c);
+  }
+
+} // sps30UartPassthroughLoop()
 
 //--Warm-up time after starting SPS30 measurement
 static const uint16_t warmupSeconds = WARMUP_SECONDS;
@@ -66,7 +91,7 @@ static const uint32_t sps30PollIntervalMs = 100UL;
 
 //--Switch handling
 static const uint32_t switchDebounceMs = 30UL;
-static const uint32_t switchLongPressMs = 5000UL;
+static const uint32_t switchLongPressMs = 2000UL;
 
 //--safeTimers declarations
 DECLARE_TIMER_MS(tWarmupTick, warmupTickMs, SKIP_MISSED_TICKS);
@@ -339,12 +364,31 @@ static void uiDrawAllFull()
 } // uiDrawAllFull()
 
 // ===================== SPS30 helpers =====================
+static void i2cScan()
+{
+  Serial.printf("I2C scan start\n");
+
+  for (uint8_t addr = 1; addr < 127; addr++)
+  {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0)
+    {
+      Serial.printf("I2C device found at 0x%02X\n", addr);
+    }
+  }
+
+  Serial.printf("I2C scan done\n");
+
+} // i2cScan()
 
 static bool sps30InitAndStart()
 {
   //--Initialize I2C on explicit pins
   Wire.begin(pinSps30Sda, pinSps30Scl);
-
+  delay(1000);           // short delay after Wire.begin() before setting clock
+  Wire.setClock(100000); // or 400000 if SPS30 is happy
+  delay(5000);
+  i2cScan();
   //--Probe sensor
   if (sps30_probe() != 0)
   {
@@ -493,6 +537,7 @@ static void updateSwitch()
   {
     switchLastReading = reading;
     RESTART_TIMER(tSwitchDebounce);
+    Serial.println("Reading changed -> Restart tSwitchDebounce timer");
   }
 
   //--When debounce expires, accept new stable state
@@ -520,7 +565,6 @@ static void updateSwitch()
   {
     if (DUE(tLongPress))
     {
-      Serial.printf("Long press detected -> switchOff()\n");
       switchOff();
     }
   }
@@ -551,6 +595,8 @@ void setup()
 
   //--Discard first ADC read to settle
   (void)analogRead(pinBatAdc);
+
+  sps30UartPassthroughInit();
 
   //--Boot logs
   Serial.printf("\n\nAnd then it starts ...\n\n");
@@ -592,7 +638,9 @@ void setup()
     Serial.printf("ERROR: SPS30 not found\n");
     messageText = "ERROR: SPS30 missing";
     uiDrawAllFull();
+    delay(2000);
     mainState = STATE_ERROR;
+    mainState = STATE_WARMUP;
   }
   else
   {
@@ -614,12 +662,14 @@ void setup()
   //--Initialize switch state tracking
   switchStableState = (digitalRead(pinSwitch) == LOW) ? LOW : HIGH;
   switchLastReading = switchStableState;
+  updateSwitch();
 
 } // setup()
 
 void loop()
 {
   updateSwitch();
+  sps30UartPassthroughLoop();
 
   switch (mainState)
   {

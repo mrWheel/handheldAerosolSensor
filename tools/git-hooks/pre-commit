@@ -2,6 +2,7 @@
 set -e
 
 python3 tools/git-hooks/lastChanged.py
+python3 tools/git-hooks/bumpProgVersion.py
 
 # Pak alleen staged bestanden (added/copied/modified)
 FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|h)$' || true)
