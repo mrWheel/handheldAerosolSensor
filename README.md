@@ -69,20 +69,23 @@ The system powers itself on with a button, performs a measurement cycle, updates
 | 34        | D34       | ADC1_CH6 (input-only)          | GPIO_PIN_BAT_ADC     | Battery ADC (input-only), ADC1 recommended |
 | 21        | D21       | I2C SDA (typical)              | GPIO_PIN_SPS30_SDA   | SPS30 SDA |
 | 22        | D22       | I2C SCL (typical)              | GPIO_PIN_SPS30_SCL   | SPS30 SCL |
+| 16        | RX2       | Future Ext.                    | GPIO_PIN_SPS_UART_RX | Serial SPS module |
+| 17        | TX2       | Future Ext.                    | GPIO_PIN_SPS_UART_TX | Serial SPS module | 
 | 23        | D23       | VSPI MOSI (typical)            | GPIO_PIN_EPD_MOSI    | E-paper DIN (MOSI) |
 | -1        | n.c.      | n.v.t.                         | GPIO_PIN_EPD_MISO    | Not connected on display |
 | 18        | D18       | VSPI SCK (typical)             | GPIO_PIN_EPD_SCK     | E-paper CLK (SCK) |
 | 27        | D27       | GPIO                           | GPIO_PIN_EPD_CS      | E-paper CS |
-| 17        | TX2       | UART2 TX / GPIO                | GPIO_PIN_EPD_DC      | E-paper DC (shared with TX2 label) |
-| 16        | RX2       | UART2 RX / GPIO                | GPIO_PIN_EPD_RST     | E-paper RST (shared with RX2 label) |
+| 19        | D19       | e-Paper DC                     | GPIO_PIN_EPD_DC      | E-paper DC |
+| 13        | D13       | e-Paper RST                    | GPIO_PIN_EPD_RST     | E-paper RST |
 | 32        | D32       | GPIO / ADC1_CH4 / Touch        | GPIO_PIN_EPD_BUSY    | E-paper BUSY (INPUT_PULLUP), non-strapping |
+| 14        | D14       | GPIO PWM Touch                 | GPIO_PIN_BUZZER_PWM  | Buzzer 
 
 
 
 ### Battery Measurement
 
-- 100 kΩ / 100 kΩ divider from battery to A0
-- Optional 100 nF capacitor from A0 to GND
+- 100 kΩ / 100 kΩ divider from battery to D34
+- Optional 100 nF capacitor from D34 to GND
 
 ---
 
@@ -93,6 +96,8 @@ The system powers itself on with a button, performs a measurement cycle, updates
 - **Libraries**
   - GxEPD2
   - Adafruit GFX
+  - Adafruit BMP280 Library
+	- Adafruit Unified Sensor
   - Sensirion SPS30 (GitHub)
   - safeTimers
 
@@ -101,62 +106,9 @@ The system powers itself on with a button, performs a measurement cycle, updates
 ## PlatformIO Configuration
 
 ```ini
-; platformio.ini
-;
-;— ESP32 + Arduino framework
-;— Pin choices avoid ESP32 strapping pins (GPIO0,2,4,5,12,15) and flash pins (GPIO6–11).
-;— Battery ADC uses ADC1 (GPIO34) so it keeps working even if WiFi were enabled.
-;— SPI uses VSPI defaults for ESP32: MOSI=23, MISO=19, SCK=18.
-
-[platformio]
-workspace_dir = .pio.nosync
-default_envs = esp32dev
-
-[env:esp32dev]
-platform = espressif32
-board = esp32dev
-framework = arduino
-
-monitor_speed = 115200
-upload_speed = 921600
-
-build_flags =
-  ;— Power latch (OUTPUT) - safe non-strapping pin
-  -D GPIO_PIN_LATCH=25
-
-  ;— User switch (INPUT_PULLUP) - safe non-strapping pin
-  -D GPIO_PIN_SWITCH=33
-
-  ;— Battery ADC (INPUT only is OK) - ADC1 pin (recommended)
-  -D GPIO_PIN_BAT_ADC=34
-
-  ;— SPS30 I2C (default ESP32 I2C pins, both non-strapping)
-  -D GPIO_PIN_SPS30_SDA=21
-  -D GPIO_PIN_SPS30_SCL=22
-
-  ;— E-paper SPI (VSPI defaults, all non-strapping)
-  -D GPIO_PIN_EPD_MOSI=23   ; (blue) DIN
-  -D GPIO_PIN_EPD_MISO=-1   ; (n.c.)
-  -D GPIO_PIN_EPD_SCK=18    ; (yellow)
-
-  ;— E-paper control pins (all non-strapping)
-  -D GPIO_PIN_EPD_CS=27     ; (orange) 
-  -D GPIO_PIN_EPD_DC=17     ; (green) TX2
-  -D GPIO_PIN_EPD_RST=16    ; (white) RX2
-  -D GPIO_PIN_EPD_BUSY=32   ; (purple)
-
-  ;— App config
-  -D WARMUP_SECONDS=3
-  -D MAX_METINGEN=2
-
-  ;— ADC reference voltage (typical ESP32 board is 3.3V; calibrate if needed)
-  -D ADC_VREF_VOLTAGE=3.30f
-
-lib_deps =
-  zinggjm/GxEPD2@^1.6.5
   adafruit/Adafruit GFX Library@^1.11.9
-  https://github.com/Sensirion/arduino-sps.git
-  https://github.com/mrWheel/safeTimers.git  
+  adafruit/Adafruit BMP280 Library
+	adafruit/Adafruit Unified Sensor
 ```
 
 ---
@@ -165,7 +117,7 @@ lib_deps =
 
 - Upload firmware with **stable power** (USB directly)
 - During normal operation the latch cuts power completely
-- GPIO D4 must be set HIGH early in `setup()` to hold power
+- GPIO D25 must be set HIGH early in `setup()` to hold power
 
 ---
 
