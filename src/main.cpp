@@ -730,6 +730,44 @@ static String formatAvgLine(float v, const char* suffix)
 
 } //   formatAvgLine()
 
+
+//— Play a two-tone beep on the buzzer (blocking)
+static void playTwoToneBeep(uint16_t firstHz, uint16_t secondHz, uint16_t toneMs, uint16_t gapMs)
+{
+  //— First tone (start)
+  tone((uint8_t)GPIO_PIN_BUZZER_PWM, (unsigned int)firstHz);
+  delay((unsigned long)toneMs);
+
+  //— Stop between tones to make the transition obvious
+  noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
+  delay((unsigned long)gapMs);
+
+  //— Second tone (start)
+  tone((uint8_t)GPIO_PIN_BUZZER_PWM, (unsigned int)secondHz);
+  delay((unsigned long)toneMs);
+
+  //— Stop
+  noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
+
+}   //   playTwoToneBeep()
+
+//— Beep when latch is fixed (low -> high)
+static void beepLatchFixed(void)
+{
+  //— Low-to-high confirmation beep
+  playTwoToneBeep(900, 1100, 500, 50);
+
+}   //   beepLatchFixed()
+
+
+//— Beep before latch disable during switchoff (high -> low)
+static void beepBeforeLatchDisable(void)
+{
+  //— High-to-low shutdown beep
+  playTwoToneBeep(1100, 900, 500, 50);
+
+}   //   beepBeforeLatchDisable()
+
 // ===================== Power off =====================
 
 static void switchOff()
@@ -745,6 +783,8 @@ static void switchOff()
   messageText = "Switching off...";
   messageText = truncateToChars(messageText, 18);
   uiUpdateMessagePartial();
+
+  beepBeforeLatchDisable();
 
   // — Log and flush
   Serial.printf("Switching off latch (PIN %u)\n", (unsigned)pinLatch);
@@ -848,6 +888,9 @@ void setup()
   // — Latch power immediately
   pinMode(pinLatch, OUTPUT);
   digitalWrite(pinLatch, HIGH);
+
+  //-x-pinMode((uint8_t)GPIO_PIN_BUZZER_PWM, OUTPUT);
+  beepLatchFixed();
 
   // — Start serial logging
   Serial.begin(115200);
