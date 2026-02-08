@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-08 - 13:05 ***/
+/*** Last Changed: 2026-02-08 - 14:37 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -16,7 +16,7 @@
 // — Sensors
 #include <sps30.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
+#include <Adafruit_BMP280.h>
 
 // — Timing
 #include <safeTimers.h>
@@ -24,7 +24,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.3.1";
+static const char* PROG_VERSION = "v0.3.2";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -49,19 +49,19 @@ static const uint8_t pinEpdDc = GPIO_PIN_EPD_DC;
 static const uint8_t pinEpdRst = GPIO_PIN_EPD_RST;
 static const uint8_t pinEpdBusy = GPIO_PIN_EPD_BUSY;
 
-// — SPS I2C pins
+// — SPS I2C pins (also used for BMP280)
 static const uint8_t pinSpsSda = GPIO_PIN_SPS_SDA;
 static const uint8_t pinSpsScl = GPIO_PIN_SPS_SCL;
 
-// — Use UART2 on remapped pins (ESP32 allows routing UART signals to most GPIOs)
+// — SPS UART pins (UART2)
 static const int8_t pinSpsUartTx = GPIO_PIN_SPS_UART_TX;
 static const int8_t pinSpsUartRx = GPIO_PIN_SPS_UART_RX;
 
 static HardwareSerial spsUart(2);
 
-// — BME280 instance
-static Adafruit_BME280 bme;
-static bool bmeOk = false;
+// — BMP280 instance
+static Adafruit_BMP280 bmp;
+static bool bmpOk = false;
 
 // — Warm-up time after starting SPS measurement
 static const uint16_t warmupSeconds = WARMUP_SECONDS;
@@ -120,21 +120,21 @@ struct UiLayout
   int16_t yMessage;
 };
 
-// — Tweaked: values a bit more left, labels shorter, one unlabeled ENV row
+// — Your tuned layout (rotation=1)
 static const UiLayout ui =
     {
         8,  // xLabel
-        84, // xValue (was 92)
+        84, // xValue
 
-        28, // yTitle baseline (12pt)
+        27, // yTitle baseline (12pt)
 
         58,  // yBattery baseline (9pt)
         82,  // yEnv baseline (no label)
-        102, // yPm1 baseline
-        122, // yPm25 baseline
-        142, // yPm10 baseline
+        106, // yPm1 baseline
+        128, // yPm25 baseline
+        150, // yPm10 baseline
 
-        166 // yMessage baseline
+        175 // yMessage baseline
 };
 
 // — UI text fields
@@ -158,6 +158,45 @@ static String truncateToChars(const String& s, uint8_t maxChars)
 
 } //   truncateToChars()
 
+// ===================== Air quality classification =====================
+
+enum AirStatus
+{
+  STATUS_GEMIDDELD,
+  STATUS_HOOG,
+  STATUS_EXTREEM
+};
+
+static AirStatus classifyPm25(float pm25)
+{
+  if (pm25 < 35.0f)
+  {
+    return STATUS_GEMIDDELD;
+  }
+
+  if (pm25 < 75.0f)
+  {
+    return STATUS_HOOG;
+  }
+
+  return STATUS_EXTREEM;
+
+} //   classifyPm25()
+
+static const char* statusText(AirStatus s)
+{
+  switch (s)
+  {
+  case STATUS_GEMIDDELD:
+    return "GEMIDDELD";
+  case STATUS_HOOG:
+    return "HOOG";
+  default:
+    return "EXTREEM";
+  }
+
+} //   statusText()
+
 // ===================== ESP32 radio shutoff =====================
 
 static void disableRadiosAsap()
@@ -176,6 +215,61 @@ static void disableRadiosAsap()
   (void)esp_bt_controller_deinit();
 
 } //   disableRadiosAsap()
+
+// ===================== I2C helpers =====================
+
+static void i2cInit()
+{
+  // — Initialize I2C once, early (shared by BMP and SPS)
+  Wire.begin(pinSpsSda, pinSpsScl);
+  delay(10);
+  Wire.setClock(100000);
+
+  Serial.printf("I2C init: SDA=%u SCL=%u\n", (unsigned)pinSpsSda, (unsigned)pinSpsScl);
+
+} //   i2cInit()
+
+static void i2cScan()
+{
+  Serial.printf("I2C scan start\n");
+
+  for (uint8_t addr = 1; addr < 127; addr++)
+  {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0)
+    {
+      Serial.printf("I2C device found at 0x%02X\n", addr);
+    }
+  }
+
+  Serial.printf("I2C scan done\n");
+
+} //   i2cScan()
+
+static uint8_t i2cReadReg8(uint8_t addr, uint8_t reg)
+{
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0)
+  {
+    return 0xFF;
+  }
+
+  if (Wire.requestFrom((int)addr, 1) != 1)
+  {
+    return 0xFF;
+  }
+
+  return (uint8_t)Wire.read();
+
+} //   i2cReadReg8()
+
+static void logBmpChipId()
+{
+  uint8_t id = i2cReadReg8(0x76, 0xD0);
+  Serial.printf("I2C 0x76 chip id (0xD0): 0x%02X\n", (unsigned)id);
+
+} //   logBmpChipId()
 
 // ===================== UART passthrough =====================
 
@@ -201,64 +295,117 @@ static void spsUartPassthroughLoop()
 
 // ===================== Battery reading =====================
 
+#ifndef BAT_CAL_GAIN
+//--Battery calibration gain (default: no correction)
+#define BAT_CAL_GAIN 1.0f
+#endif
+
+#ifndef BAT_CAL_OFFSET
+//--Battery calibration offset in volts (default: no correction)
+#define BAT_CAL_OFFSET 0.0f
+#endif
+
 static float readBatteryVoltage()
 {
-  // — ESP32 ADC is 12-bit (0..4095) when analogReadResolution(12) is used
-  uint16_t raw = (uint16_t)analogRead(pinBatAdc);
+  //--Read calibrated ADC voltage in millivolts (ESP32 eFuse based)
+  uint32_t mv = (uint32_t)analogReadMilliVolts(pinBatAdc);
+  float vAdc = (float)mv / 1000.0f;
 
-  // — Convert ADC reading to voltage at the ADC pin
-  float vAdc = ((float)raw * adcVref) / 4095.0f;
+  //--Default assumes a 2:1 divider (ADC sees Vbat/2)
+  float vBatRaw = vAdc * 2.0f;
 
-  // — Default assumes a 2:1 divider (ADC sees Vbat/2)
-  return vAdc * 2.0f;
+  //--Apply calibration (derived from measured points)
+  float vBatCal = (vBatRaw * (float)BAT_CAL_GAIN) + (float)BAT_CAL_OFFSET;
+
+  return vBatCal;
 
 } //   readBatteryVoltage()
 
 static uint8_t batteryPercentFromVoltage(float vbat)
 {
-  if (vbat >= 4.20f)
+  //--Typical 1S Li-ion (18650) voltage-to-SOC curve (approx.)
+  //--Note: Under load the voltage sag can make SOC appear lower.
+  struct Vp
+  {
+    float v;
+    uint8_t p;
+  };
+
+  static const Vp curve[] =
+      {
+          {4.20f, 100},
+          {4.15f, 95},
+          {4.11f, 90},
+          {4.08f, 85},
+          {4.02f, 80},
+          {3.98f, 75},
+          {3.95f, 70},
+          {3.91f, 65},
+          {3.87f, 60},
+          {3.85f, 55},
+          {3.82f, 50},
+          {3.79f, 45},
+          {3.77f, 40},
+          {3.74f, 35},
+          {3.72f, 30},
+          {3.70f, 25},
+          {3.68f, 20},
+          {3.65f, 15},
+          {3.62f, 10},
+          {3.58f, 5},
+          {3.50f, 0}};
+
+  //--Clamp above max
+  if (vbat >= curve[0].v)
   {
     return 100;
   }
 
-  if (vbat <= 3.20f)
+  //--Clamp below min
+  const uint8_t last = (uint8_t)(sizeof(curve) / sizeof(curve[0]) - 1);
+  if (vbat <= curve[last].v)
   {
     return 0;
   }
 
-  if (vbat > 3.70f)
+  //--Find segment and interpolate
+  for (uint8_t i = 0; i < last; i++)
   {
-    float x = (vbat - 3.70f) * (50.0f / 0.50f);
-    int p = (int)(50.0f + x);
+    float vHigh = curve[i].v;
+    float vLow = curve[i + 1].v;
 
-    if (p > 100)
+    if (vbat <= vHigh && vbat >= vLow)
     {
-      p = 100;
+      uint8_t pHigh = curve[i].p;
+      uint8_t pLow = curve[i + 1].p;
+
+      float t = (vbat - vLow) / (vHigh - vLow);
+      float p = (float)pLow + t * ((float)pHigh - (float)pLow);
+
+      if (p < 0.0f)
+      {
+        p = 0.0f;
+      }
+
+      if (p > 100.0f)
+      {
+        p = 100.0f;
+      }
+
+      return (uint8_t)(p + 0.5f);
     }
-
-    return (uint8_t)p;
   }
 
-  float x = (vbat - 3.20f) * (50.0f / 0.50f);
-  int p = (int)x;
-
-  if (p < 0)
-  {
-    p = 0;
-  }
-
-  return (uint8_t)p;
+  //--Should never happen
+  return 0;
 
 } //   batteryPercentFromVoltage()
 
 static String formatBatteryLine(float vbat, uint8_t pct)
 {
-  // — Format battery line using snprintf then convert to String
-  char buf[48];
-
   // — Example: "4.02V 78%"
+  char buf[48];
   snprintf(buf, sizeof(buf), "%.2fV %u%%", vbat, pct);
-
   return String(buf);
 
 } //   formatBatteryLine()
@@ -272,73 +419,58 @@ static void updateBatteryNow(const char* reason)
   batteryText = formatBatteryLine(vbat, pct);
   batteryText = truncateToChars(batteryText, 12);
 
-  // — Log battery status
   Serial.printf("Battery (%s): %.2f V (%u%%)\n", reason, vbat, pct);
 
 } //   updateBatteryNow()
 
-// ===================== BME280 helpers =====================
+// ===================== BMP280 helpers =====================
 
-static bool bmeInit()
+static bool bmpInit()
 {
-  // — Try common I2C addresses
-  if (bme.begin(0x76, &Wire))
+  // — BMP280 can be at 0x76 or 0x77; your chip responds at 0x76
+  if (!bmp.begin(0x76))
   {
-    return true;
+    if (!bmp.begin(0x77))
+    {
+      return false;
+    }
   }
 
-  if (bme.begin(0x77, &Wire))
-  {
-    return true;
-  }
+  // — Reasonable default config (fast enough, stable)
+  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
+                  Adafruit_BMP280::SAMPLING_X2,  // temp
+                  Adafruit_BMP280::SAMPLING_X16, // pressure
+                  Adafruit_BMP280::FILTER_X16,
+                  Adafruit_BMP280::STANDBY_MS_125);
 
-  return false;
+  return true;
 
-} //   bmeInit()
+} //   bmpInit()
 
 static void updateEnvNow(const char* reason)
 {
-  // — Format: "21.3C 45% 1013h"
-  // — If pressure does not fit, we fall back to "21.3C 45%"
-  if (!bmeOk)
+  // — Format: "21.3C 1013h" (no RH on BMP280)
+  if (!bmpOk)
   {
     envText = "-";
     return;
   }
 
-  float tC = bme.readTemperature();
-  float rh = bme.readHumidity();
-  float pHpa = bme.readPressure() / 100.0f;
+  float tC = bmp.readTemperature();
+  float pHpa = bmp.readPressure() / 100.0f;
 
-  if (!isfinite(tC) || !isfinite(rh) || !isfinite(pHpa))
+  if (!isfinite(tC) || !isfinite(pHpa))
   {
     envText = "-";
     return;
   }
 
-  char bufLong[32];
-  char bufShort[24];
+  char buf[24];
+  snprintf(buf, sizeof(buf), "%.1f*C %.0fhPa", tC, pHpa);
 
-  snprintf(bufLong, sizeof(bufLong), "%.1fC %.0f%% %.0fh", tC, rh, pHpa);
-  snprintf(bufShort, sizeof(bufShort), "%.1fC %.0f%%", tC, rh);
+  envText = truncateToChars(String(buf), 18);
 
-  String candidateLong(bufLong);
-  String candidateShort(bufShort);
-
-  // — Choose the longest that still fits our row
-  candidateLong = truncateToChars(candidateLong, 18);
-  candidateShort = truncateToChars(candidateShort, 18);
-
-  if (String(bufLong).length() <= 18)
-  {
-    envText = candidateLong;
-  }
-  else
-  {
-    envText = candidateShort;
-  }
-
-  Serial.printf("BME (%s): T=%.1fC RH=%.0f%% P=%.0fhPa\n", reason, tC, rh, pHpa);
+  Serial.printf("BMP (%s): T=%.1f*C P=%.0fhPa\n", reason, tC, pHpa);
 
 } //   updateEnvNow()
 
@@ -529,36 +661,11 @@ static void uiUpdateDynamicAll()
 
 } //   uiUpdateDynamicAll()
 
-static void i2cScan()
-{
-  Serial.printf("I2C scan start\n");
-
-  for (uint8_t addr = 1; addr < 127; addr++)
-  {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0)
-    {
-      Serial.printf("I2C device found at 0x%02X\n", addr);
-    }
-  }
-
-  Serial.printf("I2C scan done\n");
-
-} // i2cScan()
-
 // ===================== SPS helpers =====================
 
 static bool spsInitAndStart()
 {
-  // — Initialize I2C on explicit pins
-  Wire.begin(pinSpsSda, pinSpsScl);
-  delay(200);
-
-  Wire.setClock(100000);
-  delay(50);
-  i2cScan();
-
-  // — Probe sensor
+  // — Probe sensor (I2C already initialized earlier)
   if (sps30_probe() != 0)
   {
     return false;
@@ -623,52 +730,16 @@ static String formatAvgLine(float v, const char* suffix)
 
 } //   formatAvgLine()
 
-// ===================== Air quality classification =====================
-
-enum AirStatus
-{
-  STATUS_GEMIDDELD,
-  STATUS_HOOG,
-  STATUS_EXTREEM
-};
-
-static AirStatus classifyPm25(float pm25)
-{
-  if (pm25 < 35.0f)
-  {
-    return STATUS_GEMIDDELD;
-  }
-
-  if (pm25 < 75.0f)
-  {
-    return STATUS_HOOG;
-  }
-
-  return STATUS_EXTREEM;
-
-} //   classifyPm25()
-
-static const char* statusText(AirStatus s)
-{
-  switch (s)
-  {
-  case STATUS_GEMIDDELD:
-    return "GEMIDDELD";
-  case STATUS_HOOG:
-    return "HOOG";
-  default:
-    return "EXTREEM";
-  }
-
-} //   statusText()
-
 // ===================== Power off =====================
 
 static void switchOff()
 {
-  // — Update battery reading right before unlatching power
+  // — Update battery and env readings right before unlatching power
   updateBatteryNow("pre-off");
+  updateEnvNow("pre-off");
+
   uiUpdateBatteryPartial();
+  uiUpdateEnvPartial();
 
   // — Show message before power-down
   messageText = "Switching off...";
@@ -801,6 +872,17 @@ void setup()
   Serial.printf("Warm-up time: %u seconds\n", (unsigned)warmupSeconds);
   Serial.printf("Max measurements: %u\n", (unsigned)maxMetingen);
 
+  // — Initialize I2C early (required for BMP init)
+  i2cInit();
+
+  // — Bring-up diagnostics
+  i2cScan();
+  logBmpChipId();
+
+  // — Initialize BMP and read immediately
+  bmpOk = bmpInit();
+  Serial.printf("BMP init: %s\n", bmpOk ? "OK" : "FAIL");
+
   // — Initialize e-paper
   epdInit();
 
@@ -821,11 +903,7 @@ void setup()
   messageText = "Booting...";
   messageText = truncateToChars(messageText, 18);
 
-  // — Initialize BME280
-  bmeOk = bmeInit();
-  Serial.printf("BME init: %s\n", bmeOk ? "OK" : "FAIL");
-
-  // — Initial readings
+  // — Initial readings BEFORE first draw
   updateBatteryNow("boot");
   updateEnvNow("boot");
 
@@ -904,7 +982,7 @@ void loop()
     {
       warmupRemaining--;
 
-      // — Update env line during warmup (nice live feedback)
+      // — Update env line during warmup
       updateEnvNow("warmup");
       uiUpdateEnvPartial();
 
@@ -946,7 +1024,7 @@ void loop()
 
     attemptIndex++;
 
-    // — Refresh env line occasionally while sampling too
+    // — Refresh env line occasionally while sampling
     updateEnvNow("sample");
     uiUpdateEnvPartial();
 
@@ -1057,7 +1135,6 @@ void loop()
 
   case STATE_SHOW_RESULTS:
   {
-    // — Show averages at the end (overwrite PM fields with "AVG" suffix)
     pm1Text = truncateToChars(formatAvgLine(avgPm1, "AVG"), 12);
     pm25Text = truncateToChars(formatAvgLine(avgPm25, "AVG"), 12);
     pm10Text = truncateToChars(formatAvgLine(avgPm10, "AVG"), 12);
@@ -1072,9 +1149,7 @@ void loop()
     uiUpdatePmPartial();
     uiUpdateMessagePartial();
 
-    // — Stop sensor before powering down
     spsStop();
-
     mainState = STATE_POWER_DOWN;
     break;
   }
