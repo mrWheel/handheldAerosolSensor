@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 #— Keep PROG_VERSION ("vX.Y.Z") and tools/PROG_VERSION.json in sync.
 
