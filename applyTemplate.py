@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+#-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
 from __future__ import annotations
 
 import argparse
@@ -21,7 +23,7 @@ TEMPLATE_REPO = "https://github.com/mrWheel/templateRepo"
 DEFAULT_PATHS = [
     ".github/workflows",
     "tools/git-hooks",
-    ".clang-format",
+    ".clangFormat",
 ]
 
 
