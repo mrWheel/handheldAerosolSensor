@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-10 - 12:00 ***/
+/*** Last Changed: 2026-02-10 - 14:39 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -24,7 +24,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.3.4";
+static const char* PROG_VERSION = "v0.3.5";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -746,7 +746,7 @@ static void playTwoToneBeep(uint16_t firstHz, uint16_t firstToneMs, uint16_t sec
 
   // — Stop
   noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
-  digitalWrite((uint8_t)GPIO_PIN_BUZZER_PWM, HIGH); // Ensure buzzer pin is HIGH when not active
+  digitalWrite((uint8_t)GPIO_PIN_BUZZER_PWM, LOW); // Ensure buzzer pin is HIGH when not active
 
 } //   playTwoToneBeep()
 
