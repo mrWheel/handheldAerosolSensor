@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+#-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
+
 #— Keep PROG_VERSION ("vX.Y.Z") and tools/PROG_VERSION.json in sync.
 
 from __future__ import annotations
@@ -65,6 +68,23 @@ def staged_source_files(repo: Path) -> list[Path]:
   return paths
 
 
+def tracked_source_files(repo: Path) -> list[Path]:
+  #— Tracked C/C++ header/source files (repo-wide), not just staged.
+  rc, out = run(["git", "ls-files"])
+  if rc != 0:
+    return []
+
+  paths: list[Path] = []
+  for line in out.splitlines():
+    rel = line.strip()
+    if not rel:
+      continue
+    p = repo / rel
+    if p.suffix.lower() in [".c", ".cpp", ".h"] and p.exists():
+      paths.append(p)
+  return paths
+
+
 def read_prog_version(path: Path) -> Optional[SemVer]:
   text = path.read_text(encoding="utf-8", errors="replace")
 
@@ -104,14 +124,20 @@ def write_prog_version(path: Path, new_ver: SemVer) -> bool:
   return True
 
 
-def load_json(path: Path) -> SemVer:
+def load_json(path: Path) -> tuple[SemVer, Optional[str]]:
   data = json.loads(path.read_text(encoding="utf-8"))
-  return SemVer(int(data["major"]), int(data["minor"]), int(data["patch"]))
+  ver = SemVer(int(data["major"]), int(data["minor"]), int(data["patch"]))
+  version_file = data.get("versionFile")
+  if version_file is not None:
+    version_file = str(version_file)
+  return ver, version_file
 
 
-def save_json(path: Path, ver: SemVer) -> None:
+def save_json(path: Path, ver: SemVer, version_file: Optional[str]) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
-  data = {"major": ver.major, "minor": ver.minor, "patch": ver.patch}
+  data: dict[str, object] = {"major": ver.major, "minor": ver.minor, "patch": ver.patch}
+  if version_file:
+    data["versionFile"] = version_file
   path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
@@ -130,56 +156,108 @@ def git_add(repo: Path, paths: list[Path]) -> None:
   run(["git", "add", "--"] + rels)
 
 
+def find_version_file(repo: Path) -> tuple[Path, SemVer]:
+  #— Scan the repo for the file containing PROG_VERSION.
+  candidates: list[tuple[Path, SemVer]] = []
+  for f in sorted(tracked_source_files(repo)):
+    ver = read_prog_version(f)
+    if ver is not None:
+      candidates.append((f, ver))
+
+  if not candidates:
+    raise RuntimeError("Could not find PROG_VERSION in any tracked .c/.cpp/.h file.")
+
+  if len(candidates) > 1:
+    files = "\n".join([str(p.relative_to(repo)) for (p, _) in candidates])
+    raise RuntimeError(
+      "Found PROG_VERSION in multiple files. Make it unique or pin it via tools/PROG_VERSION.json versionFile.\n"
+      + files
+    )
+
+  return candidates[0]
+
+
 def main() -> int:
   repo = repo_root()
   json_path = repo / "tools" / "PROG_VERSION.json"
 
-  files = staged_source_files(repo)
-  if not files:
+  #— Only bump when a relevant C/C++ file is staged.
+  staged = staged_source_files(repo)
+  if not staged:
     return 0
 
   version_file: Optional[Path] = None
   new_in_code: Optional[SemVer] = None
+  pinned_version_file: Optional[str] = None
 
-  for f in files:
-    ver = read_prog_version(f)
-    if ver is not None:
-      version_file = f
+  if json_path.exists():
+    old_json, pinned_version_file = load_json(json_path)
+    if pinned_version_file:
+      pinned_path = repo / pinned_version_file
+      if not pinned_path.exists():
+        print(
+          f"[bumpProgVersion] ERROR: versionFile in tools/PROG_VERSION.json does not exist: {pinned_version_file}",
+          file=sys.stderr,
+        )
+        return 1
+
+      ver = read_prog_version(pinned_path)
+      if ver is None:
+        print(
+          f"[bumpProgVersion] ERROR: versionFile does not contain a readable PROG_VERSION: {pinned_version_file}",
+          file=sys.stderr,
+        )
+        return 1
+
+      version_file = pinned_path
       new_in_code = ver
-      break
 
   if version_file is None or new_in_code is None:
-    return 0
+    try:
+      version_file, new_in_code = find_version_file(repo)
+      pinned_version_file = str(version_file.relative_to(repo))
+    except Exception as e:
+      print(f"[bumpProgVersion] ERROR: {e}", file=sys.stderr)
+      return 1
 
   #— If json doesn't exist: create it from current PROG_VERSION and stop.
   if not json_path.exists():
-    save_json(json_path, new_in_code)
+    save_json(json_path, new_in_code, pinned_version_file)
     git_add(repo, [json_path])
-    print(f"[bumpProgVersion] Created tools/PROG_VERSION.json from PROG_VERSION={new_in_code}.")
+    print(
+      f"[bumpProgVersion] Created tools/PROG_VERSION.json from PROG_VERSION={new_in_code} "
+      f"(versionFile={pinned_version_file})."
+    )
     return 0
 
-  old_json = load_json(json_path)
+  old_json, _ = load_json(json_path)
   updated = compute_updated(new_in_code, old_json)
 
   changed: list[Path] = []
 
-  if (updated.major, updated.minor, updated.patch) != (old_json.major, old_json.minor, old_json.patch):
-    save_json(json_path, updated)
-    changed.append(json_path)
+  #— Always keep json in sync (and persist versionFile).
+  save_json(json_path, updated, pinned_version_file)
+  changed.append(json_path)
 
+  #— Update code if needed.
   if str(updated) != str(new_in_code):
     if not write_prog_version(version_file, updated):
-      print(f"[bumpProgVersion] ERROR: Could not update PROG_VERSION in {version_file.relative_to(repo)}", file=sys.stderr)
+      print(
+        f"[bumpProgVersion] ERROR: Could not update PROG_VERSION in {version_file.relative_to(repo)}",
+        file=sys.stderr,
+      )
       return 1
     changed.append(version_file)
 
   if changed:
     git_add(repo, changed)
-    print(f"[bumpProgVersion] PROG_VERSION -> {updated} (synced with tools/PROG_VERSION.json).")
+    print(
+      f"[bumpProgVersion] PROG_VERSION -> {updated} "
+      f"(file={version_file.relative_to(repo)}, synced with tools/PROG_VERSION.json)."
+    )
 
   return 0
 
 
 if __name__ == "__main__":
   raise SystemExit(main())
-  

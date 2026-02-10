@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+#-- Version Date: 09-02-2026 -- (dd-mm-eeyy)
+
 python3 tools/git-hooks/lastChanged.py
 python3 tools/git-hooks/bumpProgVersion.py
 

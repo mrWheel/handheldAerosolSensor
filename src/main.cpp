@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-08 - 16:58 ***/
+/*** Last Changed: 2026-02-10 - 12:00 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -24,7 +24,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.3.3";
+static const char* PROG_VERSION = "v0.3.4";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -731,22 +731,22 @@ static String formatAvgLine(float v, const char* suffix)
 } //   formatAvgLine()
 
 // — Play a two-tone beep on the buzzer (blocking)
-static void playTwoToneBeep(uint16_t firstHz, uint16_t secondHz, uint16_t toneMs, uint16_t gapMs)
+static void playTwoToneBeep(uint16_t firstHz, uint16_t firstToneMs, uint16_t secondHz, uint16_t secondToneMs)
 {
   // — First tone (start)
   tone((uint8_t)GPIO_PIN_BUZZER_PWM, (unsigned int)firstHz);
-  delay((unsigned long)toneMs);
-
-  // — Stop between tones to make the transition obvious
-  noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
-  delay((unsigned long)gapMs);
-
-  // — Second tone (start)
-  tone((uint8_t)GPIO_PIN_BUZZER_PWM, (unsigned int)secondHz);
-  delay((unsigned long)toneMs);
+  delay((unsigned long)firstToneMs);
 
   // — Stop
   noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
+
+  // — Second tone (start)
+  tone((uint8_t)GPIO_PIN_BUZZER_PWM, (unsigned int)secondHz);
+  delay((unsigned long)secondToneMs);
+
+  // — Stop
+  noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
+  digitalWrite((uint8_t)GPIO_PIN_BUZZER_PWM, HIGH); // Ensure buzzer pin is HIGH when not active
 
 } //   playTwoToneBeep()
 
@@ -754,7 +754,7 @@ static void playTwoToneBeep(uint16_t firstHz, uint16_t secondHz, uint16_t toneMs
 static void beepLatchFixed(void)
 {
   // — Low-to-high confirmation beep
-  playTwoToneBeep(900, 1100, 500, 50);
+  playTwoToneBeep(700, 200, 1500, 300);
 
 } //   beepLatchFixed()
 
@@ -762,7 +762,7 @@ static void beepLatchFixed(void)
 static void beepBeforeLatchDisable(void)
 {
   // — High-to-low shutdown beep
-  playTwoToneBeep(1100, 900, 500, 50);
+  playTwoToneBeep(1500, 200, 700, 300);
 
 } //   beepBeforeLatchDisable()
 
