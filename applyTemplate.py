@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-
+#
 #-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
+#
 from __future__ import annotations
 
 import argparse
@@ -12,6 +13,7 @@ import sys
 import tempfile
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 
@@ -222,12 +224,12 @@ def prompt_existing_file_action(
         diffText = make_unified_diff(src, dst)
 
     print("")
-    print(f"⚠️  Bestaat al: {dst}")
+    print(f"Warning: File exists: {dst}")
     print(_format_stats("  target ", dstStats))
     print(_format_stats("  template", srcStats))
 
     if _is_tag_release_yml(dst) or _is_tag_release_yml(src):
-        print("ℹ️  Let op: PROGRAM_NAME/PROGRAM_SRC/PROGRAM_DIR verschillen in tag-release.yml worden genegeerd voor compare/diff.")
+        print("Info: PROGRAM_NAME/PROGRAM_SRC/PROGRAM_DIR differences in tag-release.yml are ignored for compare/diff.")
 
     if show_diff and diffText.strip():
         print("")
@@ -236,12 +238,12 @@ def prompt_existing_file_action(
         print("-----------------------------")
 
     if not sys.stdin.isatty():
-        print("ℹ️  Geen interactieve TTY gedetecteerd; overslaan.")
+        print("Info: No interactive TTY detected; skipping.")
         return "skip"
 
     while True:
         print("")
-        print("Kies actie: [s]kip, [o]verwrite, [b]ackup+overwrite, [d]iff tonen")
+        print("Choose action: [s]kip, [o]verwrite, [b]ackup+overwrite, [d]iff")
         choice = input("> ").strip().lower()
 
         if choice in ["s", "skip", ""]:
@@ -252,7 +254,7 @@ def prompt_existing_file_action(
 
         if choice in ["b", "backup"]:
             backupPath = _next_backup_path(dst, backup_suffix)
-            print(f"🧷 Backup wordt gemaakt als: {backupPath}")
+            print(f"Info: Backup will be created at: {backupPath}")
             return "backup_overwrite"
 
         if choice in ["d", "diff"]:
@@ -265,10 +267,10 @@ def prompt_existing_file_action(
                 print(diffText)
                 print("-----------------------------")
             else:
-                print("ℹ️  Geen tekst-diff beschikbaar (mogelijk binair of identiek na normalisatie).")
+                print("Info: No text diff available (binary or identical after normalization).")
             continue
 
-        print("❓ Onbekende keuze. Gebruik s/o/b/d.")
+        print("Warning: Unknown choice. Use s/o/b/d.")
 
 
 def copy_tree_with_policy(
@@ -355,7 +357,6 @@ def copy_tree_with_policy(
 def ensure_exec_bits(hooks_dir: Path) -> None:
     """
     Try to set executable bit for hook files on POSIX.
-    On Windows this is harmless/no-op-ish for Git Bash scenarios.
     """
     if not hooks_dir.exists():
         return
@@ -374,6 +375,80 @@ def ensure_exec_bits(hooks_dir: Path) -> None:
 def set_hooks_path(repo_root: Path, hooks_path: str) -> None:
     # Set hooks path (relative is fine).
     run(["git", "config", "core.hooksPath", hooks_path], cwd=repo_root)
+
+
+def update_version_date_header(path: Path) -> None:
+    # Update:
+    #   #-- Version Date: dd-mm-yyyy -- (dd-mm-eeyy)
+    today = date.today().strftime("%d-%m-%Y")
+    text = _read_text_safe(path)
+    if text is None:
+        return
+
+    new_text, n = re.subn(
+        r"^#-- Version Date:\s*\d{2}-\d{2}-\d{4}\s*--\s*\(dd-mm-eeyy\)\s*$",
+        f"#-- Version Date: {today} -- (dd-mm-eeyy)",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+    if n == 0:
+        return
+
+    if new_text != text:
+        path.write_text(new_text, encoding="utf-8")
+
+
+def apply_self_update_from_template(
+    template_dir: Path,
+    repo_root: Path,
+    args: argparse.Namespace,
+) -> bool:
+    """
+    Update applyTemplate.py from template root if present.
+    Deferred update: copy to a temp file first, then apply policy and replace target.
+    """
+    src_self = template_dir / "applyTemplate.py"
+    dst_self = repo_root / "applyTemplate.py"
+
+    if not src_self.exists():
+        return False
+
+    tmp_self = template_dir.parent / "applyTemplate_self_update.py"
+    shutil.copy2(src_self, tmp_self)
+
+    do_update = True
+
+    if dst_self.exists():
+        if args.on_existing == "skip":
+            do_update = False
+        elif args.on_existing == "ask":
+            if files_differ(tmp_self, dst_self, args.compare):
+                action = prompt_existing_file_action(
+                    src=tmp_self,
+                    dst=dst_self,
+                    compare=args.compare,
+                    show_diff=args.show_diff,
+                    backup_suffix=args.backup_suffix,
+                )
+                if action == "skip":
+                    do_update = False
+                elif action == "backup_overwrite":
+                    backupPath = _next_backup_path(dst_self, args.backup_suffix)
+                    shutil.copy2(dst_self, backupPath)
+                    do_update = True
+                else:
+                    do_update = True
+            else:
+                do_update = False
+
+    if not do_update:
+        return False
+
+    shutil.copy2(tmp_self, dst_self)
+    update_version_date_header(dst_self)
+    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -426,21 +501,23 @@ def main() -> int:
     repo_root = Path.cwd()
 
     if not is_git_repo(repo_root):
-        print("❌ Dit lijkt geen git-repo root (geen .git gevonden). Run dit vanuit de root van je repo.", file=sys.stderr)
+        print("Error: This does not look like a git repo root (no .git found). Run from the repo root.", file=sys.stderr)
         return 2
 
     # Check that git exists
     try:
         run(["git", "--version"])
     except Exception as e:
-        print(f"❌ Git lijkt niet beschikbaar: {e}", file=sys.stderr)
+        print(f"Error: Git does not seem available: {e}", file=sys.stderr)
         return 2
+
+    self_updated = False
 
     with tempfile.TemporaryDirectory(prefix="templateRepo_") as td:
         tmp = Path(td)
         template_dir = tmp / "template"
 
-        print(f"📥 Cloning template: {args.template}")
+        print(f"Cloning template: {args.template}")
         run(["git", "clone", "--depth", "1", args.template, str(template_dir)])
 
         total_copied = 0
@@ -452,7 +529,7 @@ def main() -> int:
             dst = repo_root / rel
 
             if not src.exists():
-                print(f"⚠️  Bestaat niet in template, overslaan: {rel}")
+                print(f"Warning: Not found in template, skipping: {rel}")
                 continue
 
             dst.mkdir(parents=True, exist_ok=True) if src.is_dir() else None
@@ -472,26 +549,34 @@ def main() -> int:
 
             extra = ""
             if args.on_existing != "skip":
-                extra = f", ~{overwritten} overschreven"
+                extra = f", ~{overwritten} overwritten"
 
-            print(f"✅ {rel}: +{copied} gekopieerd, {skipped} overgeslagen (bestonden al){extra}")
+            print(f"Applied {rel}: +{copied} copied, {skipped} skipped{extra}")
+
+        # Self-update is handled last (from template root applyTemplate.py)
+        self_updated = apply_self_update_from_template(
+            template_dir=template_dir,
+            repo_root=repo_root,
+            args=args,
+        )
+        if self_updated:
+            print("applyTemplate.py was updated from template.")
 
     # Enable hooks
     hooks_dir = repo_root / args.hooks_path
     if hooks_dir.exists():
         ensure_exec_bits(hooks_dir)
         set_hooks_path(repo_root, args.hooks_path)
-        print(f"🪝 Git hooks geactiveerd: core.hooksPath = {args.hooks_path}")
+        print(f"Git hooks enabled: core.hooksPath = {args.hooks_path}")
     else:
-        print(f"⚠️  Hooks-map niet gevonden ({args.hooks_path}); core.hooksPath niet gezet.", file=sys.stderr)
+        print(f"Warning: Hooks directory not found ({args.hooks_path}); core.hooksPath not set.", file=sys.stderr)
 
-    summaryExtra = ""
-    if args.on_existing != "skip":
-        summaryExtra = f", ~{total_overwritten} overschreven"
+    # Also update this file's header date even if only hooks/workflows changed
+    update_version_date_header(repo_root / "applyTemplate.py")
 
-    print(f"🎉 Klaar. Totaal: +{total_copied} gekopieerd, {total_skipped} overgeslagen{summaryExtra}.")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+    
