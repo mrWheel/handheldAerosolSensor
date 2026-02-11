@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-11 - 14:04 ***/
+/*** Last Changed: 2026-02-11 - 14:19 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -25,7 +25,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.3.6";
+static const char* PROG_VERSION = "v0.3.7";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -1139,7 +1139,10 @@ void loop()
       {
         char buf[32];
         snprintf(buf, sizeof(buf), "Valid: %u/%u", (unsigned)validCount, (unsigned)attemptIndex);
+        Serial.printf("%s\n", buf);
         messageText = String(buf);
+        Serial.printf("Sample %u: PM1=%.1f PM2.5=%.1f PM10=%.1f\n",
+                      (unsigned)attemptIndex, pm1, pm25, pm10);
       }
     }
     else
