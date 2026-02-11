@@ -53,9 +53,9 @@
 name: Auto Tag Release
 
 env:
-  PROGRAM_NAME: "<program/project name>"
-  PROGRAM_SRC: "<main.cpp>"
-  PROGRAM_DIR: "<src>"
+  PROGRAM_NAME: "handheldAerosolSensor"
+  PROGRAM_SRC: "main.cpp"
+  PROGRAM_DIR: "src"
 
 on:
   push:
