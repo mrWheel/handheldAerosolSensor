@@ -12,6 +12,7 @@
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
+#include <Fonts/FreeMonoBold18pt7b.h>
 
 // — Sensors
 #include <sps30.h>
@@ -77,7 +78,7 @@ static const float adcVref = (float)ADC_VREF_VOLTAGE;
 
 // — UI + sampling cadence
 static const uint32_t warmupTickMs = 1000UL;
-static const uint32_t sampleIntervalMs = 1000UL;
+static const uint32_t sampleIntervalMs = 2500UL;
 static const uint32_t spsAttemptTimeoutMs = 7000UL;
 static const uint32_t spsPollIntervalMs = 100UL;
 
@@ -109,36 +110,37 @@ struct UiLayout
 {
   int16_t xText;
 
-  int16_t xPmLabel;
-  int16_t xPmValue;
+  int16_t xPmCol1;
+  int16_t xPmCol2;
+  int16_t xPmCol3;
 
   int16_t yBattery;
   int16_t yEnv;
 
-  int16_t yPm1;
-  int16_t yPm25;
-  int16_t yPm10;
+  int16_t yPmHeader;
+  int16_t yPmValues;
 
   int16_t yMessage;
 };
 
 // — Layout tuned for 200x200, rotation=1
-// — Battery/Env/Message use 9pt, PM uses 12pt
+// — 9pt for small lines + PM header
+// — 12pt for PM values
 static const UiLayout ui =
 {
   4,    // xText
 
-  4,    // xPmLabel
-  98,   // xPmValue
+  4,    // PM column 1
+  70,   // PM column 2
+  136,  // PM column 3
 
-  30,   // yBattery baseline (9pt)
-  56,   // yEnv baseline (9pt)
+  26,   // yBattery (9pt) -26-
+  52,   // yEnv (9pt) -48-
 
-  92,   // yPm1 baseline (12pt)
-  128,  // yPm25 baseline (12pt)
-  164,  // yPm10 baseline (12pt)
+  90,   // yPmHeader (9pt) -72-
+  128,  // yPmValues (12pt) -110-
 
-  190   // yMessage baseline (9pt)
+  184   // yMessage (9pt) -186-
 };
 
 // — UI text fields
@@ -461,7 +463,7 @@ static void updateEnvNow(const char* reason)
   }
 
   char buf[24];
-  snprintf(buf, sizeof(buf), "%.1f*C %.0fhPa", tC, pHpa);
+  snprintf(buf, sizeof(buf), "%.1fC %.0fhPa", tC, pHpa);
 
   envText = truncateToChars(String(buf), 18);
 
@@ -506,52 +508,6 @@ static void epdInit()
 
 } //   epdInit()
 
-static void uiDrawAllFull()
-{
-  // — Draw the complete UI (all rows) using a full refresh
-  display.setFullWindow();
-
-  display.firstPage();
-  do
-  {
-    display.fillScreen(GxEPD_WHITE);
-
-    // — Battery line (9pt) — no "BAT" label
-    display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(ui.xText, ui.yBattery);
-    display.print(batteryText);
-
-    // — Env line (9pt)
-    display.setCursor(ui.xText, ui.yEnv);
-    display.print(envText);
-
-    // — PM lines (12pt) with aligned label/value
-    display.setFont(&FreeMonoBold12pt7b);
-
-    display.setCursor(ui.xPmLabel, ui.yPm1);
-    display.print("PM1");
-    display.setCursor(ui.xPmValue, ui.yPm1);
-    display.print(pm1Text);
-
-    display.setCursor(ui.xPmLabel, ui.yPm25);
-    display.print("PM2.5");
-    display.setCursor(ui.xPmValue, ui.yPm25);
-    display.print(pm25Text);
-
-    display.setCursor(ui.xPmLabel, ui.yPm10);
-    display.print("PM10");
-    display.setCursor(ui.xPmValue, ui.yPm10);
-    display.print(pm10Text);
-
-    // — Status/message line (9pt)
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(ui.xText, ui.yMessage);
-    display.print(messageText);
-
-  } while (display.nextPage());
-
-} //   uiDrawAllFull()
 
 static void uiUpdateLinePartial9pt(int16_t yBaseline, const String& text)
 {
@@ -589,13 +545,13 @@ static void uiUpdateLinePartial9pt(int16_t yBaseline, const String& text)
 
 } //   uiUpdateLinePartial9pt()
 
-static void uiUpdatePmLinePartial12pt(int16_t yBaseline, const char* label, const String& value)
+static void uiUpdatePmValuesPartial12pt()
 {
-  // — Clear a full-width band and print PM label/value in 12pt (aligned columns)
-  const int16_t bandHeight = 32;
+  // — Clear band for PM values (12pt)
+  const int16_t bandHeight = 36;
 
   int16_t x = 0;
-  int16_t y = yBaseline - bandHeight + 2;
+  int16_t y = ui.yPmValues - bandHeight + 4;
   int16_t w = display.width();
   int16_t h = bandHeight;
 
@@ -619,41 +575,91 @@ static void uiUpdatePmLinePartial12pt(int16_t yBaseline, const char* label, cons
     display.setTextColor(GxEPD_BLACK);
     display.setFont(&FreeMonoBold12pt7b);
 
-    display.setCursor(ui.xPmLabel, yBaseline);
-    display.print(label);
+    display.setCursor(ui.xPmCol1, ui.yPmValues);
+    display.print(pm1Text);
 
-    display.setCursor(ui.xPmValue, yBaseline);
-    display.print(value);
+    display.setCursor(ui.xPmCol2, ui.yPmValues);
+    display.print(pm25Text);
+
+    display.setCursor(ui.xPmCol3, ui.yPmValues);
+    display.print(pm10Text);
 
   } while (display.nextPage());
 
-} //   uiUpdatePmLinePartial12pt()
+} //   uiUpdatePmValuesPartial12pt()
+
+static void uiDrawAllFull()
+{
+  display.setFullWindow();
+
+  display.firstPage();
+  do
+  {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+
+    // — Battery line (9pt)
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(ui.xText, ui.yBattery);
+    display.print(String("Bat: ") + batteryText);
+
+    // — BME line (9pt)
+    display.setCursor(ui.xText, ui.yEnv);
+    display.print(String("T: ") + envText);
+
+    // — PM header (9pt)
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(ui.xPmCol1, ui.yPmHeader);
+    display.print("PM1");
+
+    display.setCursor(ui.xPmCol2, ui.yPmHeader);
+    display.print("PM2.5");
+
+    display.setCursor(ui.xPmCol3, ui.yPmHeader);
+    display.print("PM10");
+
+    // — PM values (12pt)
+    display.setFont(&FreeMonoBold12pt7b);
+
+    display.setCursor(ui.xPmCol1, ui.yPmValues);
+    display.print(pm1Text);
+
+    display.setCursor(ui.xPmCol2, ui.yPmValues);
+    display.print(pm25Text);
+
+    display.setCursor(ui.xPmCol3, ui.yPmValues);
+    display.print(pm10Text);
+
+    // — Status/message (9pt)
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(ui.xText, ui.yMessage);
+    display.print(messageText);
+
+  } while (display.nextPage());
+
+} //   uiDrawAllFull()
 
 static void uiUpdateBatteryPartial()
 {
-  // — Battery line without label (9pt)
-  uiUpdateLinePartial9pt(ui.yBattery, batteryText);
+  uiUpdateLinePartial9pt(ui.yBattery, String("Bat: ") + batteryText);
 
 } //   uiUpdateBatteryPartial()
 
 static void uiUpdateEnvPartial()
 {
-  // — Env line (9pt)
-  uiUpdateLinePartial9pt(ui.yEnv, envText);
+  uiUpdateLinePartial9pt(ui.yEnv, String("T: ") + envText);
 
 } //   uiUpdateEnvPartial()
 
 static void uiUpdatePmPartial()
 {
-  uiUpdatePmLinePartial12pt(ui.yPm1, "PM1", pm1Text);
-  uiUpdatePmLinePartial12pt(ui.yPm25, "PM2.5", pm25Text);
-  uiUpdatePmLinePartial12pt(ui.yPm10, "PM10", pm10Text);
+  uiUpdatePmValuesPartial12pt();
 
 } //   uiUpdatePmPartial()
 
 static void uiUpdateMessagePartial()
 {
-  // — Message/status line (9pt)
   uiUpdateLinePartial9pt(ui.yMessage, messageText);
 
 } //   uiUpdateMessagePartial()
@@ -1074,10 +1080,9 @@ static void handleStateMeasureWaitNext()
 
 static void handleStateShowResults()
 {
-  // — Final values without "AVG"
-  pm1Text = truncateToChars(formatPmLine(avgPm1), 12);
-  pm25Text = truncateToChars(formatPmLine(avgPm25), 12);
-  pm10Text = truncateToChars(formatPmLine(avgPm10), 12);
+  pm1Text = truncateToChars(formatPmLine(avgPm1), 8);
+  pm25Text = truncateToChars(formatPmLine(avgPm25), 8);
+  pm10Text = truncateToChars(formatPmLine(avgPm10), 8);
 
   {
     AirStatus st = classifyPm25(avgPm25);
@@ -1086,7 +1091,7 @@ static void handleStateShowResults()
 
   messageText = truncateToChars(messageText, 18);
 
-  // — Full refresh/redraw before showing the final screen
+  // — Full refresh before final screen
   uiDrawAllFull();
 
   spsStop();
