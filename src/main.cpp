@@ -107,13 +107,14 @@ GxEPD2_BW<GxEPD2_154, pageHeight> display(
 
 struct UiLayout
 {
-  int16_t xLabel;
-  int16_t xValue;
+  int16_t xText;
 
-  int16_t yTitle;
+  int16_t xPmLabel;
+  int16_t xPmValue;
 
   int16_t yBattery;
   int16_t yEnv;
+
   int16_t yPm1;
   int16_t yPm25;
   int16_t yPm10;
@@ -121,21 +122,23 @@ struct UiLayout
   int16_t yMessage;
 };
 
-// — Your tuned layout (rotation=1)
+// — Layout tuned for 200x200, rotation=1
+// — Battery/Env/Message use 9pt, PM uses 12pt
 static const UiLayout ui =
-    {
-        8,  // xLabel
-        84, // xValue
+{
+  4,    // xText
 
-        27, // yTitle baseline (12pt)
+  4,    // xPmLabel
+  98,   // xPmValue
 
-        58,  // yBattery baseline (9pt)
-        82,  // yEnv baseline (no label)
-        106, // yPm1 baseline
-        128, // yPm25 baseline
-        150, // yPm10 baseline
+  30,   // yBattery baseline (9pt)
+  56,   // yEnv baseline (9pt)
 
-        175 // yMessage baseline
+  92,   // yPm1 baseline (12pt)
+  128,  // yPm25 baseline (12pt)
+  164,  // yPm10 baseline (12pt)
+
+  190   // yMessage baseline (9pt)
 };
 
 // — UI text fields
@@ -503,86 +506,57 @@ static void epdInit()
 
 } //   epdInit()
 
-static void uiDrawStaticFrameFull()
+static void uiDrawAllFull()
 {
-  // — Draw fixed UI elements once using full refresh
+  // — Draw the complete UI (all rows) using a full refresh
   display.setFullWindow();
 
   display.firstPage();
   do
   {
-    // — Clear background
     display.fillScreen(GxEPD_WHITE);
 
-    // — Title
+    // — Battery line (9pt) — no "BAT" label
     display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(ui.xText, ui.yBattery);
+    display.print(batteryText);
+
+    // — Env line (9pt)
+    display.setCursor(ui.xText, ui.yEnv);
+    display.print(envText);
+
+    // — PM lines (12pt) with aligned label/value
     display.setFont(&FreeMonoBold12pt7b);
-    display.setCursor(ui.xLabel, ui.yTitle);
-    display.print("AIR MONITOR");
 
-    // — Labels (shortened)
+    display.setCursor(ui.xPmLabel, ui.yPm1);
+    display.print("PM1");
+    display.setCursor(ui.xPmValue, ui.yPm1);
+    display.print(pm1Text);
+
+    display.setCursor(ui.xPmLabel, ui.yPm25);
+    display.print("PM2.5");
+    display.setCursor(ui.xPmValue, ui.yPm25);
+    display.print(pm25Text);
+
+    display.setCursor(ui.xPmLabel, ui.yPm10);
+    display.print("PM10");
+    display.setCursor(ui.xPmValue, ui.yPm10);
+    display.print(pm10Text);
+
+    // — Status/message line (9pt)
     display.setFont(&FreeMonoBold9pt7b);
-
-    display.setCursor(ui.xLabel, ui.yBattery);
-    display.print("BAT:");
-
-    display.setCursor(ui.xLabel, ui.yPm1);
-    display.print("PM1:");
-
-    display.setCursor(ui.xLabel, ui.yPm25);
-    display.print("PM2.5:");
-
-    display.setCursor(ui.xLabel, ui.yPm10);
-    display.print("PM10:");
-
-    // — ENV row has NO label
+    display.setCursor(ui.xText, ui.yMessage);
+    display.print(messageText);
 
   } while (display.nextPage());
 
-} //   uiDrawStaticFrameFull()
+} //   uiDrawAllFull()
 
-static void uiUpdateValuePartial(int16_t yBaseline, const String& text)
+static void uiUpdateLinePartial9pt(int16_t yBaseline, const String& text)
 {
-  // — Only clear the VALUE area, keep the static label intact
-  const int16_t bandHeight = 20;
-
-  int16_t x = ui.xValue;
-  int16_t y = yBaseline - bandHeight + 2;
-  int16_t w = display.width() - ui.xValue;
-  int16_t h = bandHeight;
-
-  if (y < 0)
-  {
-    y = 0;
-  }
-
-  if ((y + h) > display.height())
-  {
-    h = display.height() - y;
-  }
-
-  display.setPartialWindow(x, y, w, h);
-
-  display.firstPage();
-  do
-  {
-    // — Clear only the value region
-    display.fillRect(x, y, w, h, GxEPD_WHITE);
-
-    // — Draw value text
-    display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(ui.xValue, yBaseline);
-    display.print(text);
-
-  } while (display.nextPage());
-
-} //   uiUpdateValuePartial()
-
-static void uiUpdateFullRowPartial(int16_t yBaseline, int16_t xText, const String& text)
-{
-  // — Clear full width band and print text (for unlabeled rows)
-  const int16_t bandHeight = 20;
+  // — Clear a full-width band and print one line in 9pt
+  const int16_t bandHeight = 22;
 
   int16_t x = 0;
   int16_t y = yBaseline - bandHeight + 2;
@@ -604,43 +578,83 @@ static void uiUpdateFullRowPartial(int16_t yBaseline, int16_t xText, const Strin
   display.firstPage();
   do
   {
-    // — Clear full band
     display.fillRect(x, y, w, h, GxEPD_WHITE);
 
-    // — Draw text
     display.setTextColor(GxEPD_BLACK);
     display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(xText, yBaseline);
+    display.setCursor(ui.xText, yBaseline);
     display.print(text);
 
   } while (display.nextPage());
 
-} //   uiUpdateFullRowPartial()
+} //   uiUpdateLinePartial9pt()
+
+static void uiUpdatePmLinePartial12pt(int16_t yBaseline, const char* label, const String& value)
+{
+  // — Clear a full-width band and print PM label/value in 12pt (aligned columns)
+  const int16_t bandHeight = 32;
+
+  int16_t x = 0;
+  int16_t y = yBaseline - bandHeight + 2;
+  int16_t w = display.width();
+  int16_t h = bandHeight;
+
+  if (y < 0)
+  {
+    y = 0;
+  }
+
+  if ((y + h) > display.height())
+  {
+    h = display.height() - y;
+  }
+
+  display.setPartialWindow(x, y, w, h);
+
+  display.firstPage();
+  do
+  {
+    display.fillRect(x, y, w, h, GxEPD_WHITE);
+
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold12pt7b);
+
+    display.setCursor(ui.xPmLabel, yBaseline);
+    display.print(label);
+
+    display.setCursor(ui.xPmValue, yBaseline);
+    display.print(value);
+
+  } while (display.nextPage());
+
+} //   uiUpdatePmLinePartial12pt()
 
 static void uiUpdateBatteryPartial()
 {
-  uiUpdateValuePartial(ui.yBattery, batteryText);
+  // — Battery line without label (9pt)
+  uiUpdateLinePartial9pt(ui.yBattery, batteryText);
 
 } //   uiUpdateBatteryPartial()
 
 static void uiUpdateEnvPartial()
 {
-  // — ENV row has no label; print from xLabel
-  uiUpdateFullRowPartial(ui.yEnv, ui.xLabel, envText);
+  // — Env line (9pt)
+  uiUpdateLinePartial9pt(ui.yEnv, envText);
 
 } //   uiUpdateEnvPartial()
 
 static void uiUpdatePmPartial()
 {
-  uiUpdateValuePartial(ui.yPm1, pm1Text);
-  uiUpdateValuePartial(ui.yPm25, pm25Text);
-  uiUpdateValuePartial(ui.yPm10, pm10Text);
+  uiUpdatePmLinePartial12pt(ui.yPm1, "PM1", pm1Text);
+  uiUpdatePmLinePartial12pt(ui.yPm25, "PM2.5", pm25Text);
+  uiUpdatePmLinePartial12pt(ui.yPm10, "PM10", pm10Text);
 
 } //   uiUpdatePmPartial()
 
 static void uiUpdateMessagePartial()
 {
-  uiUpdateFullRowPartial(ui.yMessage, ui.xLabel, messageText);
+  // — Message/status line (9pt)
+  uiUpdateLinePartial9pt(ui.yMessage, messageText);
 
 } //   uiUpdateMessagePartial()
 
@@ -1060,9 +1074,10 @@ static void handleStateMeasureWaitNext()
 
 static void handleStateShowResults()
 {
-  pm1Text = truncateToChars(formatAvgLine(avgPm1, "AVG"), 12);
-  pm25Text = truncateToChars(formatAvgLine(avgPm25, "AVG"), 12);
-  pm10Text = truncateToChars(formatAvgLine(avgPm10, "AVG"), 12);
+  // — Final values without "AVG"
+  pm1Text = truncateToChars(formatPmLine(avgPm1), 12);
+  pm25Text = truncateToChars(formatPmLine(avgPm25), 12);
+  pm10Text = truncateToChars(formatPmLine(avgPm10), 12);
 
   {
     AirStatus st = classifyPm25(avgPm25);
@@ -1071,8 +1086,8 @@ static void handleStateShowResults()
 
   messageText = truncateToChars(messageText, 18);
 
-  uiUpdatePmPartial();
-  uiUpdateMessagePartial();
+  // — Full refresh/redraw before showing the final screen
+  uiDrawAllFull();
 
   spsStop();
   mainState = STATE_POWER_DOWN;
@@ -1212,11 +1227,8 @@ void setup()
   updateBatteryNow("boot");
   updateEnvNow("boot");
 
-  // — Draw static frame once (full refresh)
-  uiDrawStaticFrameFull();
-
-  // — Draw dynamic fields using partial updates
-  uiUpdateDynamicAll();
+  // — Full-screen initial draw (no title, 12pt everywhere)
+  uiDrawAllFull();
 
   // — Initialize SPS and decide state
   if (!spsInitAndStart())
