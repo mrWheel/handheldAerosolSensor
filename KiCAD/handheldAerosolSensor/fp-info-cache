@@ -1,4 +1,4 @@
-26723793575045664
+26725564395821824
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -73128,6 +73128,13 @@ XCVR_ESP32-S3-DEVKITC-1-N8R2
 0
 44
 44
+MyNewLibrary
+XDCR_CPI-148-24-90T-67
+
+
+0
+2
+2
 MyNewLibrary
 XDCR_VL53L1CBV0FY-1
 LiDAR sensor

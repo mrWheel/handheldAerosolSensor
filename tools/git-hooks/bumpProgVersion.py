@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-
+#
 #-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
-
+#
 #— Keep PROG_VERSION ("vX.Y.Z") and tools/PROG_VERSION.json in sync.
 
 from __future__ import annotations
