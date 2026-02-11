@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+#
+#-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
+#
 """
 ===============================================================================
-Git pre-commit hook helper: last-changed.py
+Git pre-commit hook helper: lastChanged.py
 ===============================================================================
 
 This script updates (or inserts) a timestamp header at the top of staged

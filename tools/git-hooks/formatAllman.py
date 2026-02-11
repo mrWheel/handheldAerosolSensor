@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+#
+#-- Version Date: 10-02-2026 -- (dd-mm-eyy)
+#
 import subprocess
 import sys
 from pathlib import Path
@@ -6,7 +9,7 @@ from pathlib import Path
 # ---------------- CONFIG ----------------
 
 # Extensions to format
-EXTENSIONS = {".cpp", ".c", ".h"}
+EXTENSIONS = {".c", ".cpp", ".h"}
 
 # Directories to skip (relative path fragments)
 SKIP_DIRS = {

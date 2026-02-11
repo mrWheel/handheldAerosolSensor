@@ -1,5 +1,6 @@
 {
   "major": 0,
   "minor": 3,
-  "patch": 2
+  "patch": 7,
+  "versionFile": "src/main.cpp"
 }
