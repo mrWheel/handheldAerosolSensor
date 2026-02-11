@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-10 - 14:39 ***/
+/*** Last Changed: 2026-02-11 - 14:04 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -15,6 +15,7 @@
 
 // — Sensors
 #include <sps30.h>
+#include <sensirion_i2c.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
 
@@ -24,7 +25,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.3.5";
+static const char* PROG_VERSION = "v0.3.6";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -225,7 +226,15 @@ static void i2cInit()
   delay(10);
   Wire.setClock(100000);
 
-  Serial.printf("I2C init: SDA=%u SCL=%u\n", (unsigned)pinSpsSda, (unsigned)pinSpsScl);
+  // — Prevent rare deadlocks on ESP32 if a device holds the bus
+  Wire.setTimeOut(50);
+
+  // — Bind Sensirion SPS30 driver to Wire
+  sensirion_i2c_init(Wire);
+
+  Serial.printf("I2C init: SDA=%u SCL=%u\n",
+                (unsigned)pinSpsSda,
+                (unsigned)pinSpsScl);
 
 } //   i2cInit()
 
@@ -233,43 +242,26 @@ static void i2cScan()
 {
   Serial.printf("I2C scan start\n");
 
+  uint8_t found = 0;
+
   for (uint8_t addr = 1; addr < 127; addr++)
   {
     Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0)
+    uint8_t err = (uint8_t)Wire.endTransmission(true);
+
+    if (err == 0)
     {
-      Serial.printf("I2C device found at 0x%02X\n", addr);
+      Serial.printf("I2C device found at 0x%02X\n", (unsigned)addr);
+      found++;
     }
+
+    delay(2);
+    yield();
   }
 
-  Serial.printf("I2C scan done\n");
+  Serial.printf("I2C scan done (%u devices)\n", (unsigned)found);
 
 } //   i2cScan()
-
-static uint8_t i2cReadReg8(uint8_t addr, uint8_t reg)
-{
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0)
-  {
-    return 0xFF;
-  }
-
-  if (Wire.requestFrom((int)addr, 1) != 1)
-  {
-    return 0xFF;
-  }
-
-  return (uint8_t)Wire.read();
-
-} //   i2cReadReg8()
-
-static void logBmpChipId()
-{
-  uint8_t id = i2cReadReg8(0x76, 0xD0);
-  Serial.printf("I2C 0x76 chip id (0xD0): 0x%02X\n", (unsigned)id);
-
-} //   logBmpChipId()
 
 // ===================== UART passthrough =====================
 
@@ -665,7 +657,7 @@ static void uiUpdateDynamicAll()
 
 static bool spsInitAndStart()
 {
-  // — Probe sensor (I2C already initialized earlier)
+  // — Probe sensor (Sensirion driver bound in i2cInit())
   if (sps30_probe() != 0)
   {
     return false;
@@ -778,7 +770,7 @@ static void switchOff()
   uiUpdateEnvPartial();
 
   // — Show message before power-down
-  messageText = "Switching off...";
+  messageText = " ";
   messageText = truncateToChars(messageText, 18);
   uiUpdateMessagePartial();
 
@@ -887,7 +879,6 @@ void setup()
   pinMode(pinLatch, OUTPUT);
   digitalWrite(pinLatch, HIGH);
 
-  //-x-pinMode((uint8_t)GPIO_PIN_BUZZER_PWM, OUTPUT);
   beepLatchFixed();
 
   // — Start serial logging
@@ -913,12 +904,11 @@ void setup()
   Serial.printf("Warm-up time: %u seconds\n", (unsigned)warmupSeconds);
   Serial.printf("Max measurements: %u\n", (unsigned)maxMetingen);
 
-  // — Initialize I2C early (required for BMP init)
+  // — Initialize I2C early (required for BMP init and SPS)
   i2cInit();
 
   // — Bring-up diagnostics
   i2cScan();
-  logBmpChipId();
 
   // — Initialize BMP and read immediately
   bmpOk = bmpInit();
@@ -957,13 +947,12 @@ void setup()
   // — Initialize SPS and decide state
   if (!spsInitAndStart())
   {
-    Serial.printf("ERROR: SPS not found\n");
+    Serial.printf("Error: SPS not found\n");
     messageText = "ERROR: SPS missing";
     messageText = truncateToChars(messageText, 18);
     uiUpdateMessagePartial();
     delay(2000);
     mainState = STATE_ERROR;
-    mainState = STATE_WARMUP; // — testing
   }
   else
   {
