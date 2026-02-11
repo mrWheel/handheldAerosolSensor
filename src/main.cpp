@@ -868,6 +868,280 @@ static void updateSwitch()
 
 } //   updateSwitch()
 
+// ===================== Main loop helpers =====================
+
+static void serviceBackgroundTasks()
+{
+  // — Keep switch handling and UART passthrough running continuously
+  updateSwitch();
+  spsUartPassthroughLoop();
+
+} //   serviceBackgroundTasks()
+
+static void handleStateWarmup()
+{
+  if (warmupRemaining == 0)
+  {
+    // — Reset accumulation at end of warmup
+    attemptIndex = 0;
+    validCount = 0;
+    sumPm1 = 0.0f;
+    sumPm25 = 0.0f;
+    sumPm10 = 0.0f;
+
+    // — Start measurement cycle cleanly
+    RESTART_TIMER(tSampleInterval);
+
+    messageText = "Measuring...";
+    messageText = truncateToChars(messageText, 18);
+    uiUpdateMessagePartial();
+
+    mainState = STATE_MEASURE_START_ATTEMPT;
+    return;
+  }
+
+  // — 1Hz warmup tick
+  if (DUE(tWarmupTick))
+  {
+    warmupRemaining--;
+
+    // — Update env line during warmup
+    updateEnvNow("warmup");
+    uiUpdateEnvPartial();
+
+    messageText = String("Warmup: ") + String((unsigned)warmupRemaining) + "s";
+    messageText = truncateToChars(messageText, 18);
+    uiUpdateMessagePartial();
+  }
+
+} //   handleStateWarmup()
+
+static void handleStateMeasureStartAttempt()
+{
+  if (attemptIndex >= maxMetingen)
+  {
+    if (validCount == 0)
+    {
+      messageText = "ERROR: no samples";
+      messageText = truncateToChars(messageText, 18);
+      uiUpdateMessagePartial();
+      mainState = STATE_ERROR;
+      return;
+    }
+
+    // — Compute averages
+    avgPm1 = sumPm1 / (float)validCount;
+    avgPm25 = sumPm25 / (float)validCount;
+    avgPm10 = sumPm10 / (float)validCount;
+
+    mainState = STATE_SHOW_RESULTS;
+    return;
+  }
+
+  // — Wait until the next sample slot is due
+  if (!DUE(tSampleInterval))
+  {
+    return;
+  }
+
+  attemptIndex++;
+
+  // — Refresh env line occasionally while sampling
+  updateEnvNow("sample");
+  uiUpdateEnvPartial();
+
+  // — Show attempt progress
+  {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "Sample %u/%u", (unsigned)attemptIndex, (unsigned)maxMetingen);
+    messageText = String(buf);
+  }
+
+  messageText = truncateToChars(messageText, 18);
+  uiUpdateMessagePartial();
+
+  // — Start attempt timeout + polling deterministically
+  RESTART_TIMER(tAttemptTimeout);
+  RESTART_TIMER(tSpsPoll);
+
+  mainState = STATE_MEASURE_POLL_READY;
+
+} //   handleStateMeasureStartAttempt()
+
+static void handleStateMeasurePollReady()
+{
+  // — Attempt timeout
+  if (DUE(tAttemptTimeout))
+  {
+    messageText = "Timeout: no data";
+    messageText = truncateToChars(messageText, 18);
+    uiUpdateMessagePartial();
+    mainState = STATE_MEASURE_WAIT_NEXT;
+    return;
+  }
+
+  // — Poll not faster than poll interval
+  if (!DUE(tSpsPoll))
+  {
+    return;
+  }
+
+  uint16_t ready = 0;
+
+  // — Read data-ready flag
+  if (sps30_read_data_ready(&ready) != 0)
+  {
+    return;
+  }
+
+  if (ready == 0)
+  {
+    return;
+  }
+
+  struct sps30_measurement m;
+
+  // — Read measurement
+  if (sps30_read_measurement(&m) != 0)
+  {
+    messageText = "Read failed";
+    messageText = truncateToChars(messageText, 18);
+    uiUpdateMessagePartial();
+    mainState = STATE_MEASURE_WAIT_NEXT;
+    return;
+  }
+
+  float pm1 = m.mc_1p0;
+  float pm25 = m.mc_2p5;
+  float pm10 = m.mc_10p0;
+
+  // — Always show current measurement values
+  pm1Text = truncateToChars(formatPmLine(pm1), 12);
+  pm25Text = truncateToChars(formatPmLine(pm25), 12);
+  pm10Text = truncateToChars(formatPmLine(pm10), 12);
+
+  // — Validate and accumulate
+  if (isValidSample(pm1, pm25, pm10))
+  {
+    sumPm1 += pm1;
+    sumPm25 += pm25;
+    sumPm10 += pm10;
+    validCount++;
+
+    {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "Valid: %u/%u", (unsigned)validCount, (unsigned)attemptIndex);
+      Serial.printf("%s\n", buf);
+      messageText = String(buf);
+      Serial.printf("Sample %u: PM1=%.1f PM2.5=%.1f PM10=%.1f\n",
+                    (unsigned)attemptIndex, pm1, pm25, pm10);
+    }
+  }
+  else
+  {
+    messageText = "Invalid sample";
+  }
+
+  messageText = truncateToChars(messageText, 18);
+
+  // — Update PM rows + message
+  uiUpdatePmPartial();
+  uiUpdateMessagePartial();
+
+  mainState = STATE_MEASURE_WAIT_NEXT;
+
+} //   handleStateMeasurePollReady()
+
+static void handleStateMeasureWaitNext()
+{
+  mainState = STATE_MEASURE_START_ATTEMPT;
+
+} //   handleStateMeasureWaitNext()
+
+static void handleStateShowResults()
+{
+  pm1Text = truncateToChars(formatAvgLine(avgPm1, "AVG"), 12);
+  pm25Text = truncateToChars(formatAvgLine(avgPm25, "AVG"), 12);
+  pm10Text = truncateToChars(formatAvgLine(avgPm10, "AVG"), 12);
+
+  {
+    AirStatus st = classifyPm25(avgPm25);
+    messageText = String("Done: ") + String(statusText(st));
+  }
+
+  messageText = truncateToChars(messageText, 18);
+
+  uiUpdatePmPartial();
+  uiUpdateMessagePartial();
+
+  spsStop();
+  mainState = STATE_POWER_DOWN;
+
+} //   handleStateShowResults()
+
+static void handleStateError()
+{
+  spsStop();
+  mainState = STATE_POWER_DOWN;
+
+} //   handleStateError()
+
+static void handleStatePowerDown()
+{
+  switchOff();
+
+} //   handleStatePowerDown()
+
+static void runMainStateMachine()
+{
+  switch (mainState)
+  {
+  case STATE_WARMUP:
+  {
+    handleStateWarmup();
+    break;
+  }
+
+  case STATE_MEASURE_START_ATTEMPT:
+  {
+    handleStateMeasureStartAttempt();
+    break;
+  }
+
+  case STATE_MEASURE_POLL_READY:
+  {
+    handleStateMeasurePollReady();
+    break;
+  }
+
+  case STATE_MEASURE_WAIT_NEXT:
+  {
+    handleStateMeasureWaitNext();
+    break;
+  }
+
+  case STATE_SHOW_RESULTS:
+  {
+    handleStateShowResults();
+    break;
+  }
+
+  case STATE_ERROR:
+  {
+    handleStateError();
+    break;
+  }
+
+  case STATE_POWER_DOWN:
+  default:
+  {
+    handleStatePowerDown();
+    break;
+  }
+  }
+
+} //   runMainStateMachine()
+
 // ===================== Arduino entrypoints =====================
 
 void setup()
@@ -980,226 +1254,7 @@ void setup()
 
 void loop()
 {
-  updateSwitch();
-  spsUartPassthroughLoop();
-
-  switch (mainState)
-  {
-  case STATE_WARMUP:
-  {
-    if (warmupRemaining == 0)
-    {
-      // — Reset accumulation at end of warmup
-      attemptIndex = 0;
-      validCount = 0;
-      sumPm1 = 0.0f;
-      sumPm25 = 0.0f;
-      sumPm10 = 0.0f;
-
-      // — Start measurement cycle cleanly
-      RESTART_TIMER(tSampleInterval);
-
-      messageText = "Measuring...";
-      messageText = truncateToChars(messageText, 18);
-      uiUpdateMessagePartial();
-
-      mainState = STATE_MEASURE_START_ATTEMPT;
-      break;
-    }
-
-    // — 1Hz warmup tick
-    if (DUE(tWarmupTick))
-    {
-      warmupRemaining--;
-
-      // — Update env line during warmup
-      updateEnvNow("warmup");
-      uiUpdateEnvPartial();
-
-      messageText = String("Warmup: ") + String((unsigned)warmupRemaining) + "s";
-      messageText = truncateToChars(messageText, 18);
-      uiUpdateMessagePartial();
-    }
-
-    break;
-  }
-
-  case STATE_MEASURE_START_ATTEMPT:
-  {
-    if (attemptIndex >= maxMetingen)
-    {
-      if (validCount == 0)
-      {
-        messageText = "ERROR: no samples";
-        messageText = truncateToChars(messageText, 18);
-        uiUpdateMessagePartial();
-        mainState = STATE_ERROR;
-        break;
-      }
-
-      // — Compute averages
-      avgPm1 = sumPm1 / (float)validCount;
-      avgPm25 = sumPm25 / (float)validCount;
-      avgPm10 = sumPm10 / (float)validCount;
-
-      mainState = STATE_SHOW_RESULTS;
-      break;
-    }
-
-    // — Wait until the next sample slot is due
-    if (!DUE(tSampleInterval))
-    {
-      break;
-    }
-
-    attemptIndex++;
-
-    // — Refresh env line occasionally while sampling
-    updateEnvNow("sample");
-    uiUpdateEnvPartial();
-
-    // — Show attempt progress
-    {
-      char buf[32];
-      snprintf(buf, sizeof(buf), "Sample %u/%u", (unsigned)attemptIndex, (unsigned)maxMetingen);
-      messageText = String(buf);
-    }
-
-    messageText = truncateToChars(messageText, 18);
-    uiUpdateMessagePartial();
-
-    // — Start attempt timeout + polling deterministically
-    RESTART_TIMER(tAttemptTimeout);
-    RESTART_TIMER(tSpsPoll);
-
-    mainState = STATE_MEASURE_POLL_READY;
-    break;
-  }
-
-  case STATE_MEASURE_POLL_READY:
-  {
-    // — Attempt timeout
-    if (DUE(tAttemptTimeout))
-    {
-      messageText = "Timeout: no data";
-      messageText = truncateToChars(messageText, 18);
-      uiUpdateMessagePartial();
-      mainState = STATE_MEASURE_WAIT_NEXT;
-      break;
-    }
-
-    // — Poll not faster than poll interval
-    if (!DUE(tSpsPoll))
-    {
-      break;
-    }
-
-    uint16_t ready = 0;
-
-    // — Read data-ready flag
-    if (sps30_read_data_ready(&ready) != 0)
-    {
-      break;
-    }
-
-    if (ready == 0)
-    {
-      break;
-    }
-
-    struct sps30_measurement m;
-
-    // — Read measurement
-    if (sps30_read_measurement(&m) != 0)
-    {
-      messageText = "Read failed";
-      messageText = truncateToChars(messageText, 18);
-      uiUpdateMessagePartial();
-      mainState = STATE_MEASURE_WAIT_NEXT;
-      break;
-    }
-
-    float pm1 = m.mc_1p0;
-    float pm25 = m.mc_2p5;
-    float pm10 = m.mc_10p0;
-
-    // — Always show current measurement values
-    pm1Text = truncateToChars(formatPmLine(pm1), 12);
-    pm25Text = truncateToChars(formatPmLine(pm25), 12);
-    pm10Text = truncateToChars(formatPmLine(pm10), 12);
-
-    // — Validate and accumulate
-    if (isValidSample(pm1, pm25, pm10))
-    {
-      sumPm1 += pm1;
-      sumPm25 += pm25;
-      sumPm10 += pm10;
-      validCount++;
-
-      {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Valid: %u/%u", (unsigned)validCount, (unsigned)attemptIndex);
-        Serial.printf("%s\n", buf);
-        messageText = String(buf);
-        Serial.printf("Sample %u: PM1=%.1f PM2.5=%.1f PM10=%.1f\n",
-                      (unsigned)attemptIndex, pm1, pm25, pm10);
-      }
-    }
-    else
-    {
-      messageText = "Invalid sample";
-    }
-
-    messageText = truncateToChars(messageText, 18);
-
-    // — Update PM rows + message
-    uiUpdatePmPartial();
-    uiUpdateMessagePartial();
-
-    mainState = STATE_MEASURE_WAIT_NEXT;
-    break;
-  }
-
-  case STATE_MEASURE_WAIT_NEXT:
-  {
-    mainState = STATE_MEASURE_START_ATTEMPT;
-    break;
-  }
-
-  case STATE_SHOW_RESULTS:
-  {
-    pm1Text = truncateToChars(formatAvgLine(avgPm1, "AVG"), 12);
-    pm25Text = truncateToChars(formatAvgLine(avgPm25, "AVG"), 12);
-    pm10Text = truncateToChars(formatAvgLine(avgPm10, "AVG"), 12);
-
-    {
-      AirStatus st = classifyPm25(avgPm25);
-      messageText = String("Done: ") + String(statusText(st));
-    }
-
-    messageText = truncateToChars(messageText, 18);
-
-    uiUpdatePmPartial();
-    uiUpdateMessagePartial();
-
-    spsStop();
-    mainState = STATE_POWER_DOWN;
-    break;
-  }
-
-  case STATE_ERROR:
-  {
-    spsStop();
-    mainState = STATE_POWER_DOWN;
-    break;
-  }
-
-  case STATE_POWER_DOWN:
-  default:
-  {
-    switchOff();
-    break;
-  }
-  }
+  serviceBackgroundTasks();
+  runMainStateMachine();
 
 } //   loop()
