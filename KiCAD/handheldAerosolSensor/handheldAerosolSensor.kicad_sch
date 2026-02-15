@@ -6,8 +6,8 @@
 	(paper "A4")
 	(title_block
 		(title "handheldAerosolSensor")
-		(date "2026-02-11")
-		(rev "0")
+		(date "2026-02-14")
+		(rev "1")
 		(company "By Willem Aandewiel")
 	)
 	(lib_symbols
@@ -2034,6 +2034,89 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Mechanical:MountingHole"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(property "Reference" "H"
+				(at 0 5.08 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "MountingHole"
+				(at 0 3.175 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Mounting Hole without connection"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "mounting hole"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "MountingHole*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "MountingHole_0_1"
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 1.27)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "MyNewLibrary:BH-18650-PC"
 			(pin_names
 				(offset 1.016)
@@ -3551,12 +3634,12 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "MyNewLibrary:TP4056Module"
+		(symbol "MyNewLibrary:TP4056module"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "U"
-				(at -1.016 3.81 0)
+				(at 5.334 -6.604 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -3598,11 +3681,10 @@
 					(hide yes)
 				)
 			)
-			(symbol "TP4056Module_0_1"
-				(polyline
-					(pts
-						(xy -6.35 2.54) (xy 7.62 2.54) (xy 7.62 -2.54) (xy -6.35 -2.54) (xy -6.35 2.54)
-					)
+			(symbol "TP4056module_0_1"
+				(rectangle
+					(start -7.62 3.81)
+					(end 7.62 -5.08)
 					(stroke
 						(width 0)
 						(type default)
@@ -3612,11 +3694,19 @@
 					)
 				)
 			)
-			(symbol "TP4056Module_1_1"
-				(pin power_in line
-					(at -10.16 1.27 0)
+			(symbol "TP4056module_1_1"
+				(text "TP4056module"
+					(at 0.254 5.842 0)
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(pin power_out line
+					(at -12.7 2.54 0)
 					(length 5.08)
-					(name "In-"
+					(name "Out-"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3631,10 +3721,64 @@
 						)
 					)
 				)
-				(pin power_in line
-					(at -10.16 -1.27 0)
+				(pin power_out line
+					(at -12.7 -2.54 0)
 					(length 5.08)
-					(name "In+"
+					(name "Out+"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin unspecified line
+					(at -1.27 -10.16 90)
+					(length 5.08)
+					(name "USB+"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin unspecified line
+					(at 1.27 -10.16 90)
+					(length 5.08)
+					(name "USB-"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 12.7 2.54 180)
+					(length 5.08)
+					(name "Batt-"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3649,10 +3793,10 @@
 						)
 					)
 				)
-				(pin power_out line
-					(at 11.43 1.27 180)
+				(pin power_in line
+					(at 12.7 -2.54 180)
 					(length 5.08)
-					(name "Out-"
+					(name "Bat+"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -3660,24 +3804,6 @@
 						)
 					)
 					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin power_out line
-					(at 11.43 -1.27 180)
-					(length 5.08)
-					(name "Out+"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -4742,6 +4868,12 @@
 		(uuid "42c85f67-3236-4324-a548-724ac0a77f4e")
 	)
 	(junction
+		(at 177.8 104.14)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "474e5728-9ff1-483c-8d44-3f36d656b608")
+	)
+	(junction
 		(at 71.12 78.74)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4754,7 +4886,7 @@
 		(uuid "6316176e-9273-47f3-b178-a931f2c43768")
 	)
 	(junction
-		(at 135.89 119.38)
+		(at 135.89 116.84)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "811b05f2-367b-4194-9ae6-2ad10fd036fa")
@@ -4784,6 +4916,18 @@
 		(uuid "adc1c499-f699-4968-82ed-7a34994aa1f2")
 	)
 	(junction
+		(at 173.99 111.76)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ae6546b8-a5a9-42d2-b7a0-2f374de29b62")
+	)
+	(junction
+		(at 181.61 119.38)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "dc38400b-32fd-4167-83b3-62611985f51e")
+	)
+	(junction
 		(at 74.93 50.8)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4802,16 +4946,16 @@
 		(uuid "f38a413d-8155-4850-b27f-8fe19b817fb1")
 	)
 	(no_connect
-		(at 151.13 64.77)
-		(uuid "2b4ea37f-8fc5-40b4-8413-b0adabad0b84")
-	)
-	(no_connect
-		(at 151.13 67.31)
-		(uuid "31b72ee5-48af-41ad-a896-af56a9423d2a")
+		(at 156.21 124.46)
+		(uuid "3dfdf093-bba9-4673-bb9b-1cbaad151889")
 	)
 	(no_connect
 		(at 151.13 72.39)
 		(uuid "41b9d52a-e660-4731-9274-84bc1f730aa2")
+	)
+	(no_connect
+		(at 69.85 15.24)
+		(uuid "4358751f-3ccb-4806-a798-1bd2352f6c9f")
 	)
 	(no_connect
 		(at 181.61 72.39)
@@ -4820,10 +4964,6 @@
 	(no_connect
 		(at 151.13 52.07)
 		(uuid "87c9f41e-54e1-4d68-868b-18c53beca440")
-	)
-	(no_connect
-		(at 21.59 20.32)
-		(uuid "8c72911d-440d-4eda-a16c-a954eec42ff4")
 	)
 	(no_connect
 		(at 151.13 80.01)
@@ -4842,6 +4982,10 @@
 		(uuid "ca368d44-c1e9-4139-8347-65392d7763c4")
 	)
 	(no_connect
+		(at 156.21 121.92)
+		(uuid "cd31ac7e-7ca8-47bd-8367-706fd7a1887e")
+	)
+	(no_connect
 		(at 151.13 69.85)
 		(uuid "d009e306-e4b8-427b-881c-c0083c2cb422")
 	)
@@ -4854,16 +4998,16 @@
 		(uuid "e99cacd1-703a-438d-adf9-b80fc187271a")
 	)
 	(no_connect
-		(at 170.18 119.38)
+		(at 214.63 116.84)
 		(uuid "eab9ecb7-70e8-4123-b6f0-6ad920bf354f")
 	)
 	(no_connect
-		(at 170.18 121.92)
+		(at 214.63 119.38)
 		(uuid "ec396a96-d9a1-4ce6-8d9c-e424a4456719")
 	)
 	(no_connect
-		(at 21.59 22.86)
-		(uuid "f63408ef-e9e6-4ad4-81a2-1319079a707c")
+		(at 67.31 15.24)
+		(uuid "f9390b35-802e-4f9f-8e9b-a9c43001889e")
 	)
 	(wire
 		(pts
@@ -4967,6 +5111,16 @@
 	)
 	(wire
 		(pts
+			(xy 181.61 119.38) (xy 184.15 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2703ba58-75b8-4760-894c-a6ccc63fc6e0")
+	)
+	(wire
+		(pts
 			(xy 44.45 50.8) (xy 48.26 50.8)
 		)
 		(stroke
@@ -5027,7 +5181,7 @@
 	)
 	(wire
 		(pts
-			(xy 138.43 109.22) (xy 134.62 109.22)
+			(xy 138.43 106.68) (xy 134.62 106.68)
 		)
 		(stroke
 			(width 0)
@@ -5047,6 +5201,26 @@
 	)
 	(wire
 		(pts
+			(xy 173.99 111.76) (xy 185.42 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4d5e2434-31f7-4030-ab74-dbd6786f3376")
+	)
+	(wire
+		(pts
+			(xy 173.99 104.14) (xy 177.8 104.14)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4d82f389-76d9-44cf-a2d9-8cb9c0571fb5")
+	)
+	(wire
+		(pts
 			(xy 71.12 72.39) (xy 71.12 78.74)
 		)
 		(stroke
@@ -5054,6 +5228,16 @@
 			(type default)
 		)
 		(uuid "602b305d-105a-41e5-86a8-e5a8c183e808")
+	)
+	(wire
+		(pts
+			(xy 156.21 111.76) (xy 173.99 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "62c35a5b-51f6-442e-9670-4140781d6587")
 	)
 	(wire
 		(pts
@@ -5107,7 +5291,7 @@
 	)
 	(wire
 		(pts
-			(xy 135.89 119.38) (xy 134.62 119.38)
+			(xy 135.89 116.84) (xy 134.62 116.84)
 		)
 		(stroke
 			(width 0)
@@ -5147,7 +5331,7 @@
 	)
 	(wire
 		(pts
-			(xy 135.89 116.84) (xy 135.89 119.38)
+			(xy 135.89 114.3) (xy 135.89 116.84)
 		)
 		(stroke
 			(width 0)
@@ -5187,7 +5371,17 @@
 	)
 	(wire
 		(pts
-			(xy 138.43 119.38) (xy 135.89 119.38)
+			(xy 177.8 104.14) (xy 181.61 104.14)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9fce9459-3521-4934-82f7-8d59558f0d92")
+	)
+	(wire
+		(pts
+			(xy 138.43 116.84) (xy 135.89 116.84)
 		)
 		(stroke
 			(width 0)
@@ -5207,7 +5401,7 @@
 	)
 	(wire
 		(pts
-			(xy 138.43 114.3) (xy 134.62 114.3)
+			(xy 138.43 111.76) (xy 134.62 111.76)
 		)
 		(stroke
 			(width 0)
@@ -5224,6 +5418,16 @@
 			(type default)
 		)
 		(uuid "a6fd6500-0a35-4efd-bb5e-7c08c1ec894e")
+	)
+	(wire
+		(pts
+			(xy 181.61 111.76) (xy 181.61 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ad71ed97-dae8-416c-8cf1-f34a32e301c5")
 	)
 	(wire
 		(pts
@@ -5244,6 +5448,16 @@
 			(type default)
 		)
 		(uuid "b895789f-aa99-4a77-8513-ca52b10c1a71")
+	)
+	(wire
+		(pts
+			(xy 35.56 22.86) (xy 34.29 22.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bbf7af7e-b29c-4268-9796-329f1135384e")
 	)
 	(wire
 		(pts
@@ -5287,6 +5501,16 @@
 	)
 	(wire
 		(pts
+			(xy 177.8 102.87) (xy 177.8 104.14)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c545be5f-71a7-407d-b30e-4974238a90c4")
+	)
+	(wire
+		(pts
 			(xy 55.88 76.2) (xy 55.88 78.74)
 		)
 		(stroke
@@ -5307,7 +5531,7 @@
 	)
 	(wire
 		(pts
-			(xy 134.62 116.84) (xy 135.89 116.84)
+			(xy 134.62 114.3) (xy 135.89 114.3)
 		)
 		(stroke
 			(width 0)
@@ -5334,6 +5558,16 @@
 			(type default)
 		)
 		(uuid "dbae7ae3-bf82-4a99-b6a6-7281a6aee15b")
+	)
+	(wire
+		(pts
+			(xy 156.21 119.38) (xy 181.61 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e17069be-5263-4763-860e-e030bdeb3b5a")
 	)
 	(wire
 		(pts
@@ -5417,7 +5651,7 @@
 	)
 	(wire
 		(pts
-			(xy 138.43 111.76) (xy 134.62 111.76)
+			(xy 138.43 109.22) (xy 134.62 109.22)
 		)
 		(stroke
 			(width 0)
@@ -21537,7 +21771,7 @@
 	)
 	(global_label "SCL"
 		(shape bidirectional)
-		(at 203.2 116.84 0)
+		(at 237.49 114.3 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21547,7 +21781,7 @@
 		)
 		(uuid "023da45c-7795-4e75-a795-5b8dd10606c5")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 210.8041 116.84 0)
+			(at 245.0941 114.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21579,9 +21813,31 @@
 			)
 		)
 	)
+	(global_label "OUT+"
+		(shape output)
+		(at 81.28 22.86 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "04bd1a23-9e54-490a-9636-0e9050d35af0")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 89.4662 22.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "SCL"
 		(shape bidirectional)
-		(at 170.18 114.3 0)
+		(at 214.63 111.76 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21591,7 +21847,7 @@
 		)
 		(uuid "0e103a23-7b2e-473c-95c0-ab0e99380637")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 177.7841 114.3 0)
+			(at 222.2341 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21603,7 +21859,7 @@
 	)
 	(global_label "SDA"
 		(shape bidirectional)
-		(at 138.43 111.76 0)
+		(at 138.43 109.22 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21613,7 +21869,7 @@
 		)
 		(uuid "0f0f6322-ab74-461d-b201-14e1f48183b2")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 146.0946 111.76 0)
+			(at 146.0946 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21625,7 +21881,7 @@
 	)
 	(global_label "GND"
 		(shape bidirectional)
-		(at 138.43 119.38 0)
+		(at 138.43 116.84 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21635,7 +21891,7 @@
 		)
 		(uuid "1abdd9b0-d616-4f41-8a08-d47a6782cabb")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 146.397 119.38 0)
+			(at 146.397 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21658,6 +21914,28 @@
 		(uuid "2805f687-0c23-4140-85af-5f8c298a0e71")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 138.6879 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "PMS5003-SET"
+		(shape output)
+		(at 151.13 67.31 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "3bcaa2fa-b560-402a-a9ef-4d174e283106")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 134.4774 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21713,7 +21991,7 @@
 	)
 	(global_label "3v3"
 		(shape bidirectional)
-		(at 203.2 111.76 0)
+		(at 237.49 109.22 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21723,7 +22001,7 @@
 		)
 		(uuid "442a89be-0570-4c1b-a31e-06f21e850723")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 210.6831 111.76 0)
+			(at 244.9731 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21867,7 +22145,7 @@
 	)
 	(global_label "+5v"
 		(shape bidirectional)
-		(at 138.43 109.22 0)
+		(at 138.43 106.68 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21877,7 +22155,7 @@
 		)
 		(uuid "5f346c48-f8c9-4cea-bb3d-55fbcaddccf7")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 146.276 109.22 0)
+			(at 146.276 106.68 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21887,9 +22165,9 @@
 			)
 		)
 	)
-	(global_label "TX2"
-		(shape output)
-		(at 181.61 59.69 0)
+	(global_label "GND"
+		(shape bidirectional)
+		(at 156.21 109.22 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21897,14 +22175,36 @@
 			)
 			(justify left)
 		)
-		(uuid "720a9be2-d333-46ba-8075-462f67c7a0e9")
+		(uuid "64d7c19e-ea03-4fc5-b6f5-823c01593cd1")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 187.9818 59.69 0)
+			(at 164.177 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "B-"
+		(shape bidirectional)
+		(at 55.88 27.94 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "729e1768-2b9a-49fe-b732-0111787c9a3c")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 48.9411 27.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 				(hide yes)
 			)
 		)
@@ -21933,7 +22233,7 @@
 	)
 	(global_label "GND"
 		(shape bidirectional)
-		(at 170.18 111.76 0)
+		(at 214.63 109.22 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -21943,7 +22243,7 @@
 		)
 		(uuid "78860223-3a65-40ff-8ab9-10b425c02f81")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 178.147 111.76 0)
+			(at 222.597 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21971,6 +22271,28 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "PMS5003-RESET"
+		(shape output)
+		(at 151.13 64.77 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "87d8e340-f4b0-4ef9-b44d-62c2aba16f06")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 132.0584 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 				(hide yes)
 			)
 		)
@@ -22085,9 +22407,9 @@
 			)
 		)
 	)
-	(global_label "BATT"
-		(shape output)
-		(at 43.18 22.86 0)
+	(global_label "PMS5003-RESET"
+		(shape input)
+		(at 184.15 119.38 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -22095,9 +22417,9 @@
 			)
 			(justify left)
 		)
-		(uuid "93681889-8244-47d5-92ae-50489e6d0125")
+		(uuid "93304235-139e-4fc0-bc04-75c480fe9994")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 50.459 22.86 0)
+			(at 203.2216 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22151,29 +22473,29 @@
 			)
 		)
 	)
-	(global_label "BATT"
+	(global_label "B+"
 		(shape bidirectional)
-		(at 64.77 24.13 180)
+		(at 35.56 22.86 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify right)
+			(justify left)
 		)
 		(uuid "9dac2011-d4b4-48e2-804f-de92716fec39")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 56.3797 24.13 0)
+			(at 42.4989 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
+				(justify left)
 				(hide yes)
 			)
 		)
 	)
-	(global_label "BATT"
+	(global_label "OUT+"
 		(shape input)
 		(at 44.45 48.26 90)
 		(fields_autoplaced yes)
@@ -22185,7 +22507,7 @@
 		)
 		(uuid "a2395f2c-cdc8-49b0-ab52-787ea9d43986")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 44.45 40.981 90)
+			(at 44.45 40.0738 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22239,9 +22561,75 @@
 			)
 		)
 	)
+	(global_label "TX2-PMS5003-RX"
+		(shape output)
+		(at 181.61 59.69 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "c4b34e91-73c5-4cf2-99d4-8d9280a59f7a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 202.375 59.69 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "PMS5003-SET"
+		(shape input)
+		(at 185.42 111.76 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "c58dd77b-24cd-41f6-8d90-83ad1be97011")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 202.0726 111.76 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "B-"
+		(shape bidirectional)
+		(at 21.59 22.86 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "c5df9db6-e0ea-489e-bc39-37188810bf3b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 14.6511 22.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "SCL"
 		(shape bidirectional)
-		(at 138.43 114.3 0)
+		(at 138.43 111.76 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -22251,7 +22639,7 @@
 		)
 		(uuid "c62345a8-808b-455c-b91f-a9b62e4c8872")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 146.0341 114.3 0)
+			(at 146.0341 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22305,6 +22693,50 @@
 			)
 		)
 	)
+	(global_label "+5v"
+		(shape bidirectional)
+		(at 156.21 106.68 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "da4c70d5-fcfb-432a-a530-5a9ff4e8a1f9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 164.056 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "RX2-PMS5003-TX"
+		(shape output)
+		(at 156.21 116.84 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "dc2d7a9d-28e8-4f14-93c2-ca08ab447361")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 176.975 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "EPD_MOSI(DIN)"
 		(shape bidirectional)
 		(at 181.61 67.31 0)
@@ -22329,7 +22761,7 @@
 	)
 	(global_label "3v3"
 		(shape bidirectional)
-		(at 170.18 109.22 0)
+		(at 214.63 106.68 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -22339,7 +22771,7 @@
 		)
 		(uuid "e05fc642-8fa7-4cda-adf4-bb555dffd809")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 177.6631 109.22 0)
+			(at 222.1131 106.68 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22349,7 +22781,29 @@
 			)
 		)
 	)
-	(global_label "RX2"
+	(global_label "3v3"
+		(shape bidirectional)
+		(at 177.8 102.87 90)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "e0c341f7-9648-47e9-b160-f6092c180f2a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 177.8 95.3869 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "RX2-PMS5003-TX"
 		(shape input)
 		(at 181.61 57.15 0)
 		(fields_autoplaced yes)
@@ -22361,7 +22815,7 @@
 		)
 		(uuid "e204b5d3-8860-4ecc-a655-5b673e244bc5")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 188.2842 57.15 0)
+			(at 202.375 57.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22395,7 +22849,7 @@
 	)
 	(global_label "SDA"
 		(shape bidirectional)
-		(at 203.2 114.3 0)
+		(at 237.49 111.76 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -22405,7 +22859,7 @@
 		)
 		(uuid "ef13a087-4121-45c5-820f-b5df2c83133e")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 210.8646 114.3 0)
+			(at 245.1546 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22415,9 +22869,9 @@
 			)
 		)
 	)
-	(global_label "SCL"
+	(global_label "SDA"
 		(shape bidirectional)
-		(at 170.18 116.84 0)
+		(at 214.63 114.3 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -22427,7 +22881,29 @@
 		)
 		(uuid "f24b259d-f7f8-4dff-be19-643750fa27c3")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 177.7841 116.84 0)
+			(at 222.2946 114.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "TX2-PMS5003-RX"
+		(shape input)
+		(at 156.21 114.3 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "f2e9fad2-df78-46a3-98df-6e5c560925e3")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 176.975 114.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22439,7 +22915,7 @@
 	)
 	(global_label "GND"
 		(shape bidirectional)
-		(at 203.2 109.22 0)
+		(at 237.49 106.68 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -22449,12 +22925,34 @@
 		)
 		(uuid "f54cc1ac-bfaa-466f-b683-9bd05ca9d001")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 211.167 109.22 0)
+			(at 245.457 106.68 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "B+"
+		(shape bidirectional)
+		(at 55.88 22.86 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "fad2753d-498d-477b-b82e-0f88e901617a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 48.9411 22.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 				(hide yes)
 			)
 		)
@@ -22500,6 +22998,76 @@
 				)
 				(justify left)
 				(hide yes)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 181.61 107.95 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "00e9eb69-247f-4fe0-afa5-aebe62c3ab50")
+		(property "Reference" "R11"
+			(at 183.388 106.7378 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "10k"
+			(at 183.388 109.1621 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+			(at 183.388 107.95 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 181.61 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 181.61 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "19758211-eb01-4c24-ae9b-ff1ed1f045c0")
+		)
+		(pin "1"
+			(uuid "e97c0396-8830-4f89-aad8-d85d5c6dcf19")
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "R11")
+					(unit 1)
+				)
 			)
 		)
 	)
@@ -22719,7 +23287,7 @@
 	)
 	(symbol
 		(lib_id "MyNewLibrary:BH-18650-PC")
-		(at 72.39 24.13 0)
+		(at 26.67 22.86 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -22728,7 +23296,7 @@
 		(fields_autoplaced yes)
 		(uuid "1adf5769-48a2-4bf6-99d8-35e357bf833d")
 		(property "Reference" "BT1"
-			(at 69.85 17.4455 0)
+			(at 29.21 29.5445 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22736,7 +23304,7 @@
 			)
 		)
 		(property "Value" "BH-18650-PC"
-			(at 69.85 19.8698 0)
+			(at 29.21 27.1202 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22744,7 +23312,7 @@
 			)
 		)
 		(property "Footprint" "BH-18650-PC:BAT_BH-18650-PC"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22754,7 +23322,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22763,7 +23331,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22772,7 +23340,7 @@
 			)
 		)
 		(property "MF" "MPD (Memory Protection Devices)"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22782,7 +23350,7 @@
 			)
 		)
 		(property "MAXIMUM_PACKAGE_HEIGHT" "21.31mm"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22792,7 +23360,7 @@
 			)
 		)
 		(property "Package" "None"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22802,7 +23370,7 @@
 			)
 		)
 		(property "Price" "None"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22812,7 +23380,7 @@
 			)
 		)
 		(property "Check_prices" "https://www.snapeda.com/parts/BH-18650-PC/MPD/view-part/?ref=eda"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22822,7 +23390,7 @@
 			)
 		)
 		(property "STANDARD" "Manufacturer Recommendation"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22832,7 +23400,7 @@
 			)
 		)
 		(property "PARTREV" "05/17/19"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22842,7 +23410,7 @@
 			)
 		)
 		(property "SnapEDA_Link" "https://www.snapeda.com/parts/BH-18650-PC/MPD/view-part/?ref=snap"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22852,7 +23420,7 @@
 			)
 		)
 		(property "MP" "BH-18650-PC"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22862,7 +23430,7 @@
 			)
 		)
 		(property "Description_1" "Battery Holder (Open) 18650 1 Cell PC Pin"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22872,7 +23440,7 @@
 			)
 		)
 		(property "Availability" "In Stock"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22882,7 +23450,7 @@
 			)
 		)
 		(property "MANUFACTURER" "MPD"
-			(at 72.39 24.13 0)
+			(at 26.67 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23258,75 +23826,9 @@
 		)
 	)
 	(symbol
-		(lib_id "power:GND")
-		(at 77.47 24.13 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "302fa436-89ca-4030-84e4-fbe5788265a7")
-		(property "Reference" "#PWR02"
-			(at 83.82 24.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "GND"
-			(at 80.645 24.13 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" ""
-			(at 77.47 24.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 77.47 24.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 77.47 24.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "6c389eac-a2b3-46ea-86a7-0b8cc901e0eb")
-		)
-		(instances
-			(project ""
-				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
-					(reference "#PWR02")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Connector:Conn_01x04_Pin")
-		(at 198.12 111.76 0)
+		(at 232.41 111.76 0)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -23334,7 +23836,7 @@
 		(dnp no)
 		(uuid "347b0cfe-1127-43ce-ae44-ca7659710302")
 		(property "Reference" "J1"
-			(at 200.152 118.618 0)
+			(at 234.442 104.902 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23342,7 +23844,7 @@
 			)
 		)
 		(property "Value" "I2C 3v3"
-			(at 200.914 105.918 0)
+			(at 235.204 117.602 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23350,7 +23852,7 @@
 			)
 		)
 		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
-			(at 198.12 111.76 0)
+			(at 232.41 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23359,7 +23861,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 198.12 111.76 0)
+			(at 232.41 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23368,7 +23870,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x04, script generated"
-			(at 198.12 111.76 0)
+			(at 232.41 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23399,7 +23901,8 @@
 	)
 	(symbol
 		(lib_id "Connector:Conn_01x08_Pin")
-		(at 97.79 114.3 0)
+		(at 97.79 116.84 0)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -23407,7 +23910,7 @@
 		(dnp no)
 		(uuid "3acf0ab9-2b36-419f-a524-0a93bdb5dfd0")
 		(property "Reference" "J2"
-			(at 98.552 126.746 0)
+			(at 100.076 126.746 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23415,7 +23918,7 @@
 			)
 		)
 		(property "Value" "ePaper"
-			(at 99.822 102.362 0)
+			(at 107.696 102.616 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23423,7 +23926,7 @@
 			)
 		)
 		(property "Footprint" "Connector_JST:JST_XH_B8B-XH-A_1x08_P2.50mm_Vertical"
-			(at 97.79 114.3 0)
+			(at 97.79 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23432,7 +23935,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 97.79 114.3 0)
+			(at 97.79 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23441,7 +23944,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x08, script generated"
-			(at 97.79 114.3 0)
+			(at 97.79 116.84 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23477,6 +23980,142 @@
 			(project ""
 				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
 					(reference "J2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 173.99 107.95 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "3c4047df-f64c-4ecf-892b-d2d54ee79a69")
+		(property "Reference" "R10"
+			(at 175.768 106.7378 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "10k"
+			(at 175.768 109.1621 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_1206_3216Metric_Pad1.30x1.75mm_HandSolder"
+			(at 175.768 107.95 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 173.99 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 173.99 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "d1ae20dd-cdc5-44a1-ba5d-dc3ce707084e")
+		)
+		(pin "1"
+			(uuid "940515d2-0a8f-46c7-8e1b-dcad46b82631")
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "R10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 269.24 16.51 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "406026be-eebc-41dd-80e7-b5cef0270040")
+		(property "Reference" "H3"
+			(at 271.78 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "MountingHole"
+			(at 271.78 17.7221 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.7mm"
+			(at 269.24 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 269.24 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 269.24 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "H3")
 					(unit 1)
 				)
 			)
@@ -23553,6 +24192,72 @@
 		)
 	)
 	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 279.4 16.51 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "4c6df8bf-ac94-4830-8055-7fc65866de31")
+		(property "Reference" "H1"
+			(at 281.94 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "MountingHole"
+			(at 281.94 17.7221 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.7mm"
+			(at 279.4 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 279.4 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 279.4 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(instances
+			(project ""
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R")
 		(at 43.18 118.11 90)
 		(unit 1)
@@ -23570,7 +24275,7 @@
 				)
 			)
 		)
-		(property "Value" "2k2"
+		(property "Value" "100k"
 			(at 43.18 115.3738 90)
 			(effects
 				(font
@@ -23615,6 +24320,72 @@
 			(project "handheldAerosolSensor"
 				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
 					(reference "R8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 259.08 16.51 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "5238245e-34a4-4911-8594-cb54c582755b")
+		(property "Reference" "H5"
+			(at 261.62 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "MountingHole"
+			(at 261.62 17.7221 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.7mm"
+			(at 259.08 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 259.08 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 259.08 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "H5")
 					(unit 1)
 				)
 			)
@@ -23844,7 +24615,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "D_Filled"
+		(property "Value" "1N4148"
 			(at 62.992 64.7121 90)
 			(effects
 				(font
@@ -24389,75 +25160,8 @@
 		)
 	)
 	(symbol
-		(lib_id "power:GND")
-		(at 43.18 20.32 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "84ca9f7a-6425-4240-9089-40eb48050b15")
-		(property "Reference" "#PWR01"
-			(at 49.53 20.32 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "GND"
-			(at 46.355 20.32 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" ""
-			(at 43.18 20.32 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 43.18 20.32 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 43.18 20.32 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "f18267b0-38e7-4211-b504-e487130a025f")
-		)
-		(instances
-			(project "handheldAerosolSensor"
-				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
-					(reference "#PWR01")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Connector:Conn_01x06_Pin")
-		(at 165.1 114.3 0)
+		(at 209.55 111.76 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -24465,7 +25169,7 @@
 		(dnp no)
 		(uuid "8d97eeb6-60c9-4c53-9110-f5b7ab0cd92c")
 		(property "Reference" "J4"
-			(at 166.878 124.206 0)
+			(at 211.328 121.666 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24473,7 +25177,7 @@
 			)
 		)
 		(property "Value" "BME/P280"
-			(at 168.91 105.664 0)
+			(at 213.36 103.124 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24481,7 +25185,7 @@
 			)
 		)
 		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical"
-			(at 165.1 114.3 0)
+			(at 209.55 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24490,7 +25194,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 165.1 114.3 0)
+			(at 209.55 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24499,7 +25203,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x06, script generated"
-			(at 165.1 114.3 0)
+			(at 209.55 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24737,6 +25441,72 @@
 		)
 	)
 	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 274.32 16.51 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a25feb14-7ec5-4be2-bb9a-7e0e5709cc3a")
+		(property "Reference" "H2"
+			(at 276.86 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "MountingHole"
+			(at 276.86 17.7221 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.7mm"
+			(at 274.32 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 274.32 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 274.32 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Transistor_FET:IRF4905")
 		(at 60.96 53.34 270)
 		(mirror x)
@@ -24820,7 +25590,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "acbd466f-dc1e-422a-979d-081854136dd0")
 		(property "Reference" "#PWR06"
 			(at 181.61 99.06 0)
@@ -24832,7 +25601,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 181.61 96.8431 0)
+			(at 185.166 93.218 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24880,7 +25649,7 @@
 	)
 	(symbol
 		(lib_id "Connector:Conn_01x05_Pin")
-		(at 129.54 114.3 0)
+		(at 129.54 111.76 0)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
@@ -24889,7 +25658,7 @@
 		(dnp no)
 		(uuid "b228111e-d84a-46db-904c-4b671354deca")
 		(property "Reference" "J3"
-			(at 132.08 120.904 0)
+			(at 132.08 118.364 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24897,7 +25666,7 @@
 			)
 		)
 		(property "Value" "SPS30"
-			(at 131.318 105.918 0)
+			(at 131.318 103.378 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24905,7 +25674,7 @@
 			)
 		)
 		(property "Footprint" "Connector_JST:JST_XH_B5B-XH-A_1x05_P2.50mm_Vertical"
-			(at 129.54 114.3 0)
+			(at 129.54 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24914,7 +25683,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 129.54 114.3 0)
+			(at 129.54 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24923,7 +25692,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x05, script generated"
-			(at 129.54 114.3 0)
+			(at 129.54 111.76 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24956,33 +25725,35 @@
 		)
 	)
 	(symbol
-		(lib_id "MyNewLibrary:TP4056Module")
-		(at 31.75 21.59 0)
+		(lib_id "power:GND")
+		(at 81.28 27.94 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "b3485d98-e6b7-4aab-a237-ace071500399")
-		(property "Reference" "U1"
-			(at 32.385 15.0325 0)
+		(uuid "be2cb995-4d90-4fe5-99bd-1c31f4ecfa5e")
+		(property "Reference" "#PWR012"
+			(at 87.63 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
-		(property "Value" "~"
-			(at 32.385 17.4568 0)
+		(property "Value" "GND"
+			(at 84.455 27.94 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
-		(property "Footprint" "MyNewLibrary:TP4056_USB-Charger_Board"
-			(at 31.75 21.59 0)
+		(property "Footprint" ""
+			(at 81.28 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24991,7 +25762,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 31.75 21.59 0)
+			(at 81.28 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24999,8 +25770,8 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
-			(at 31.75 21.59 0)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 81.28 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -25009,21 +25780,12 @@
 			)
 		)
 		(pin "1"
-			(uuid "eb73c63c-703d-4f67-b98e-93218ec04a65")
-		)
-		(pin "4"
-			(uuid "f424cd0e-e2fe-4023-a3c3-2388938300ba")
-		)
-		(pin "3"
-			(uuid "f2b79f85-796c-4382-90cf-5463af275e3c")
-		)
-		(pin "2"
-			(uuid "280a0662-4b67-4a44-89f6-c19c64313414")
+			(uuid "8c4db08d-62d3-4188-8047-907f69234845")
 		)
 		(instances
-			(project ""
+			(project "handheldAerosolSensor"
 				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
-					(reference "U1")
+					(reference "#PWR012")
 					(unit 1)
 				)
 			)
@@ -25090,6 +25852,86 @@
 			(project "handheldAerosolSensor"
 				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
 					(reference "#PWR09")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "MyNewLibrary:TP4056module")
+		(at 68.58 25.4 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "c54b0823-1884-46f7-a466-fecc8ce93593")
+		(property "Reference" "U1"
+			(at 75.184 19.05 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "~"
+			(at 68.58 33.8568 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "MyNewLibrary:TP4056_USB-Charger_Board"
+			(at 68.58 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 68.58 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 68.58 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "394e912e-6453-42f0-83ca-9b37ad383ec0")
+		)
+		(pin "4"
+			(uuid "f3a76d4e-7eb7-445e-8907-21b53d7010c7")
+		)
+		(pin "3"
+			(uuid "f0cbdc8c-758c-4979-bb83-da5fad2c9f79")
+		)
+		(pin "5"
+			(uuid "bd41651e-4210-402f-848a-a88398b792f9")
+		)
+		(pin "6"
+			(uuid "e5b7a687-b9bf-4a2c-b26a-1d28543249cb")
+		)
+		(pin "2"
+			(uuid "d29d2493-522b-4f4f-93c1-815256e53616")
+		)
+		(instances
+			(project ""
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "U1")
 					(unit 1)
 				)
 			)
@@ -25253,7 +26095,7 @@
 				)
 			)
 		)
-		(property "Value" "D_Filled"
+		(property "Value" "1N4148"
 			(at 81.28 83.3698 0)
 			(effects
 				(font
@@ -25718,6 +26560,200 @@
 				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
 					(reference "LS1")
 					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 264.16 16.51 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f6d29280-3ed3-416a-872c-e18c22d43178")
+		(property "Reference" "H4"
+			(at 266.7 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "MountingHole"
+			(at 266.7 17.7221 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.7mm"
+			(at 264.16 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 264.16 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 264.16 16.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "H4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector:Conn_01x08_Pin")
+		(at 151.13 116.84 0)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "f91139c0-2504-455b-9229-b2c8991e9262")
+		(property "Reference" "J6"
+			(at 153.67 127.508 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PMS5003"
+			(at 154.178 103.124 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Connector_JST:JST_XH_B8B-XH-A_1x08_P2.50mm_Vertical"
+			(at 151.13 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 151.13 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x08, script generated"
+			(at 151.13 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "5"
+			(uuid "a62e9f3a-4563-4b01-b836-79df65dd31f9")
+		)
+		(pin "1"
+			(uuid "d4a27782-c5f0-4208-87e7-96d15fc9a6a8")
+		)
+		(pin "2"
+			(uuid "476baa43-508d-4fdf-b87f-deec42ab24ba")
+		)
+		(pin "4"
+			(uuid "454b431e-3f6f-43d4-b34e-ca4b74db8d2c")
+		)
+		(pin "6"
+			(uuid "7169fe7b-98da-43bf-b8a9-cbb624283c8b")
+		)
+		(pin "7"
+			(uuid "41e43b1f-e25c-40cd-852f-97e9a2d591e1")
+		)
+		(pin "3"
+			(uuid "1076e552-9940-4018-8739-9a2b36ee1821")
+		)
+		(pin "8"
+			(uuid "447ccb2e-779c-48dc-9a33-59340f0bd322")
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(reference "J6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(sheet
+		(at 248.285 36.83)
+		(size 12.7 3.81)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "30519d6d-aca4-41d5-8ab5-7f42267bc67c")
+		(property "Sheetname" "PowerLatch"
+			(at 248.285 36.1184 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "untitled.kicad_sch"
+			(at 248.285 41.2246 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "handheldAerosolSensor"
+				(path "/1fe95df2-7edb-4901-8bae-333c3a696969"
+					(page "2")
 				)
 			)
 		)
