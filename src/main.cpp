@@ -52,7 +52,7 @@ static const uint8_t pinEpdRst = GPIO_PIN_EPD_RST;
 static const uint8_t pinEpdBusy = GPIO_PIN_EPD_BUSY;
 
 // — SPS I2C pins (also used for BMP280)
-static const uint8_t pinSpsSda = GPIO_PIN_SPS_SDA;
+static const uint8_t pinSpsSda = GPIO_PIN_SPS30_SDA;
 static const uint8_t pinSpsScl = GPIO_PIN_SPS_SCL;
 
 // — SPS UART pins (UART2)
