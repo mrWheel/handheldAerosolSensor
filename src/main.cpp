@@ -26,7 +26,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.3.7";
+static const char* PROG_VERSION = "v0.9.0";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
