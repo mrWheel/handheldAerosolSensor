@@ -1,6 +1,6 @@
 # -------------------------------------------------------------------------------
 #
-#-- Version Date: 09-02-2026 -- (dd-mm-eeyy)
+#-- Version Date: 01-03-2026 -- (dd-mm-eeyy)
 #
 # GitHub Actions workflow: Auto tag and manage GitHub Releases based on a version
 # string found in your PlatformIO firmware source file.
@@ -8,14 +8,17 @@
 # Intended use
 # - PlatformIO/embedded projects where the firmware version is defined in source
 #   code (example format below).
-# - On every push to the main branch, the workflow reads the version, compares it
+# - On every push to the main/master branch, the workflow reads the version, compares it
 #   to the latest existing semver tag (vX.Y.Z), and (if newer) creates a new tag.
 #
 # Version format expected in source file
 # - The workflow extracts the version from:
 #     <PROGRAM_DIR>/<PROGRAM_SRC>
-#   by searching for a line like:
-#     const char* PROG_VERSION = "v1.2.3";
+#   by searching for a PROG_VERSION line and extracting only:
+#     vX.Y.Z
+#   from examples like:
+#     const char* PROG_VERSION = "v1.2.3 <and more text ..>";
+#     const char* PROG_VERSION = v1.2.3 <and more text ..>;
 #
 # Tagging rules
 # - If the extracted version is newer than the latest semver tag in the repo:
@@ -53,14 +56,15 @@
 name: Auto Tag Release
 
 env:
-  PROGRAM_NAME: "handheldAerosolSensor"
-  PROGRAM_SRC: "main.cpp"
-  PROGRAM_DIR: "src"
+  PROGRAM_NAME: "<program/project name>"
+  PROGRAM_SRC: "<main.cpp>"
+  PROGRAM_DIR: "<src>"
 
 on:
   push:
     branches:
       - main
+      - master
 
 jobs:
   tag:
@@ -76,10 +80,26 @@ jobs:
       - name: Get version from ${{ env.PROGRAM_SRC }}
         id: getVersion
         run: |
-          version=$(grep 'const char\* PROG_VERSION' ${{ env.PROGRAM_DIR }}/${{ env.PROGRAM_SRC }} | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "Extracted version: $version"
+          versionLine=$(grep -m1 'PROG_VERSION' ${{ env.PROGRAM_DIR }}/${{ env.PROGRAM_SRC }} || true)
+          version=$(echo "$versionLine" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
+          parseError=""
+
+          if [ -z "$versionLine" ]; then
+            parseError="No PROG_VERSION line found in ${{ env.PROGRAM_DIR }}/${{ env.PROGRAM_SRC }}."
+          elif [ -z "$version" ]; then
+            parseError="PROG_VERSION line found, but no semantic version (vX.Y.Z) was detected."
+          fi
+
+          echo "Detected PROG_VERSION line: $versionLine"
+          echo "Extracted tag version: $version"
+          if [ -n "$parseError" ]; then
+            echo "::error::$parseError"
+          fi
+
           echo "VERSION=$version" >> $GITHUB_OUTPUT
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "VERSION_PARSE_ERROR=$parseError" >> $GITHUB_OUTPUT
+          echo "VERSION_PARSE_ERROR=$parseError" >> $GITHUB_ENV
 
       - name: Fetch all tags
         run: git fetch --tags
@@ -95,9 +115,16 @@ jobs:
         id: compareVersion
         run: |
           version="${{ steps.getVersion.outputs.VERSION }}"
+          versionParseError="${{ steps.getVersion.outputs.VERSION_PARSE_ERROR }}"
           latest="${{ steps.latestTag.outputs.LATEST }}"
 
           echo "Comparing source version $version with latest tag $latest"
+
+          if [ -n "$versionParseError" ]; then
+            echo "::error::$versionParseError"
+            echo "PROCEED=false" >> $GITHUB_ENV
+            exit 0
+          fi
 
           if [ -z "$version" ]; then
             echo "::error::No version found in ${{ env.PROGRAM_DIR }}/${{ env.PROGRAM_SRC }}. Skipping."

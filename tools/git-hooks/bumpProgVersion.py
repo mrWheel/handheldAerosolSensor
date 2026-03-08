@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
+#-- Version Date: 25-02-2026 -- (dd-mm-eeyy)
 #
 #— Keep PROG_VERSION ("vX.Y.Z") and tools/PROG_VERSION.json in sync.
 
@@ -17,18 +17,24 @@ from typing import Optional
 
 #— Matches e.g.:
 #—   const char* PROG_VERSION = "v1.2.3";
-#— We only require the token PROG_VERSION and a string literal "vX.Y.Z".
+#—   const char* PROG_VERSION = "v1.2.3 <extra text>";
+#— We only extract/replace the first semantic version token vX.Y.Z.
 PROG_VERSION_LINE_REGEX = re.compile(
   r"""
-  (?P<prefix>.*?\bPROG_VERSION\b.*?=\s*")
+  (?P<prefix>.*?\bPROG_VERSION\b.*?=\s*"?[^;\n]*?)
   v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)
-  (?P<suffix>"\s*;.*)
+  (?P<suffix>[^;\n]*"?\s*;.*)
   """,
   re.VERBOSE,
 )
 
-#— Fallback: allow formats where '=' and ';' might differ, but still contain "vX.Y.Z"
-PROG_VERSION_ANYWHERE_REGEX = re.compile(r'\bPROG_VERSION\b.*?"v(\d+)\.(\d+)\.(\d+)"')
+#— Fallback: allow formats where '=' and quotes differ, but still contain "vX.Y.Z"
+PROG_VERSION_ANYWHERE_REGEX = re.compile(r'\bPROG_VERSION\b[^\n;]*?v(\d+)\.(\d+)\.(\d+)')
+
+#— Fallback replacement: replace the first semantic version token after PROG_VERSION.
+PROG_VERSION_ANYWHERE_REPLACE_REGEX = re.compile(
+  r'(?P<prefix>\bPROG_VERSION\b[^\n;]*?)v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
+)
 
 
 @dataclass
@@ -85,6 +91,44 @@ def tracked_source_files(repo: Path) -> list[Path]:
   return paths
 
 
+def working_tree_source_files(repo: Path) -> list[Path]:
+  #— Fallback scan for source files in working tree (also finds untracked files).
+  paths: list[Path] = []
+  for p in repo.rglob("*"):
+    if not p.is_file():
+      continue
+    if ".git" in p.parts:
+      continue
+    if p.suffix.lower() in [".c", ".cpp", ".h"]:
+      paths.append(p)
+  return paths
+
+
+def is_match_in_comment(text: str, match_start: int) -> bool:
+  #— Ignore matches that appear inside C/C++ comments.
+  before = text[:match_start]
+  if before.rfind("/*") > before.rfind("*/"):
+    return True
+
+  line_start = text.rfind("\n", 0, match_start) + 1
+  line_prefix = text[line_start:match_start]
+  if line_prefix.lstrip().startswith("//"):
+    return True
+
+  return False
+
+
+def find_first_uncommented_match(pattern: re.Pattern, text: str) -> Optional[re.Match]:
+  pos = 0
+  while True:
+    m = pattern.search(text, pos)
+    if not m:
+      return None
+    if not is_match_in_comment(text, m.start()):
+      return m
+    pos = m.end()
+
+
 def read_prog_version(path: Path) -> Optional[SemVer]:
   text = path.read_text(encoding="utf-8", errors="replace")
 
@@ -92,11 +136,11 @@ def read_prog_version(path: Path) -> Optional[SemVer]:
   if "PROG_VERSION" not in text:
     return None
 
-  m = PROG_VERSION_LINE_REGEX.search(text)
+  m = find_first_uncommented_match(PROG_VERSION_LINE_REGEX, text)
   if m:
     return SemVer(int(m.group("major")), int(m.group("minor")), int(m.group("patch")))
 
-  m2 = PROG_VERSION_ANYWHERE_REGEX.search(text)
+  m2 = find_first_uncommented_match(PROG_VERSION_ANYWHERE_REGEX, text)
   if m2:
     return SemVer(int(m2.group(1)), int(m2.group(2)), int(m2.group(3)))
 
@@ -109,15 +153,18 @@ def write_prog_version(path: Path, new_ver: SemVer) -> bool:
   def repl(match: re.Match) -> str:
     return f'{match.group("prefix")}{new_ver}{match.group("suffix")}'
 
-  new_text, n = PROG_VERSION_LINE_REGEX.subn(repl, text, count=1)
-  if n == 0:
+  m = find_first_uncommented_match(PROG_VERSION_LINE_REGEX, text)
+  if m:
+    new_text = text[:m.start()] + repl(m) + text[m.end():]
+  else:
     #— Try weaker replacement (first "vX.Y.Z" near PROG_VERSION).
-    m2 = PROG_VERSION_ANYWHERE_REGEX.search(text)
+    def repl_anywhere(match: re.Match) -> str:
+      return f'{match.group("prefix")}{new_ver}'
+
+    m2 = find_first_uncommented_match(PROG_VERSION_ANYWHERE_REPLACE_REGEX, text)
     if not m2:
       return False
-
-    old = f'v{m2.group(1)}.{m2.group(2)}.{m2.group(3)}'
-    new_text = text.replace(f'"{old}"', f'"{new_ver}"', 1)
+    new_text = text[:m2.start()] + repl_anywhere(m2) + text[m2.end():]
 
   if new_text != text:
     path.write_text(new_text, encoding="utf-8")
@@ -159,7 +206,21 @@ def git_add(repo: Path, paths: list[Path]) -> None:
 def find_version_file(repo: Path) -> tuple[Path, SemVer]:
   #— Scan the repo for the file containing PROG_VERSION.
   candidates: list[tuple[Path, SemVer]] = []
-  for f in sorted(tracked_source_files(repo)):
+
+  files_to_scan: list[Path] = []
+  seen: set[Path] = set()
+
+  for f in tracked_source_files(repo):
+    if f not in seen:
+      files_to_scan.append(f)
+      seen.add(f)
+
+  for f in working_tree_source_files(repo):
+    if f not in seen:
+      files_to_scan.append(f)
+      seen.add(f)
+
+  for f in sorted(files_to_scan):
     ver = read_prog_version(f)
     if ver is not None:
       candidates.append((f, ver))

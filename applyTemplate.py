@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#-- Version Date: 10-02-2026 -- (dd-mm-eeyy)
+#-- Version Date: 01-03-2026 -- (dd-mm-eeyy)
 #
 from __future__ import annotations
 
@@ -20,12 +20,14 @@ from pathlib import Path
 TEMPLATE_REPO = "https://github.com/mrWheel/templateRepo"
 
 
-# Wat je standaard wil “syncen” vanuit de template.
-# Voeg gerust extra paden toe als je templateRepo later groeit.
+# Default paths to sync from the template repository.
+# Add more paths here when the template repository grows.
 DEFAULT_PATHS = [
     ".github/workflows",
     "tools/git-hooks",
     ".clang-format",
+    ".codingRules.md",
+    "createProjectStructure.py",
 ]
 
 
@@ -35,6 +37,17 @@ class FileStats:
     mtime: float
     lineCount: int
     sha256: str
+
+
+class UserQuitRequested(Exception):
+    pass
+
+
+TAG_RELEASE_ENV_KEYS = [
+    "PROGRAM_NAME",
+    "PROGRAM_SRC",
+    "PROGRAM_DIR",
+]
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> str:
@@ -54,13 +67,6 @@ def run(cmd: list[str], cwd: Path | None = None) -> str:
     return p.stdout.strip()
 
 
-def is_git_repo(root: Path) -> bool:
-    return (root / ".git").exists() or (
-        # support worktrees/submodules where .git is a file
-        (root / ".git").is_file()
-    )
-
-
 def _read_text_safe(path: Path) -> str | None:
     try:
         return path.read_text(encoding="utf-8", errors="replace")
@@ -75,12 +81,6 @@ def _count_lines(path: Path) -> int:
     return text.count("\n") + (0 if text.endswith("\n") or text == "" else 1)
 
 
-def _calc_sha256_bytes(data: bytes) -> str:
-    h = hashlib.sha256()
-    h.update(data)
-    return h.hexdigest()
-
-
 def _calc_sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -89,51 +89,72 @@ def _calc_sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _is_tag_release_yml(path: Path) -> bool:
-    p = path.as_posix()
-    return p.endswith(".github/workflows/tag-release.yml") or (
-        "workflows" in p and p.endswith("tag-release.yml")
-    )
-
-
-def _normalize_for_compare(path: Path, text: str) -> str:
-    # Ignore project-specific values in tag-release.yml
-    if not _is_tag_release_yml(path):
-        return text
-
-    # Replace the entire value of these keys, keeping indentation and key formatting
-    # Works for lines like:
-    #   PROGRAM_NAME: "<Enter System Name>"
-    patterns = [
-        r"^(\s*PROGRAM_NAME\s*:\s*).*$",
-        r"^(\s*PROGRAM_SRC\s*:\s*).*$",
-        r"^(\s*PROGRAM_DIR\s*:\s*).*$",
-    ]
-
-    lines = text.splitlines(keepends=True)
-    out: list[str] = []
-
-    for line in lines:
-        replaced = False
-        for pat in patterns:
-            m = re.match(pat, line)
-            if m:
-                out.append(m.group(1) + '"<ignored>"\n')
-                replaced = True
-                break
-        if not replaced:
-            out.append(line)
-
-    return "".join(out)
-
-
 def _calc_sha256_for_compare(path: Path) -> str:
-    text = _read_text_safe(path)
-    if text is None:
-        return _calc_sha256_file(path)
+    return _calc_sha256_file(path)
 
-    normalized = _normalize_for_compare(path, text)
-    return _calc_sha256_bytes(normalized.encode("utf-8", errors="replace"))
+
+def _is_tag_release_yml(path: Path) -> bool:
+    return path.as_posix().endswith(".github/workflows/tag-release.yml")
+
+
+def _merge_tag_release_env_values(template_text: str, existing_text: str) -> str:
+    env_values: dict[str, str] = {}
+
+    for key in TAG_RELEASE_ENV_KEYS:
+        m = re.search(rf"^(\s*{key}\s*:\s*)(.*)$", existing_text, flags=re.MULTILINE)
+        if m:
+            env_values[key] = m.group(2)
+
+    if not env_values:
+        return template_text
+
+    merged_lines: list[str] = []
+    for line in template_text.splitlines(keepends=True):
+        replaced = False
+        for key, value in env_values.items():
+            m = re.match(rf"^(\s*{key}\s*:\s*).*$", line)
+            if not m:
+                continue
+
+            newline = "\n" if line.endswith("\n") else ""
+            merged_lines.append(m.group(1) + value + newline)
+            replaced = True
+            break
+
+        if not replaced:
+            merged_lines.append(line)
+
+    return "".join(merged_lines)
+
+
+def _copy_file_with_special_handling(src: Path, dst: Path) -> bool:
+    if not dst.exists() or not _is_tag_release_yml(src) or not _is_tag_release_yml(dst):
+        shutil.copy2(src, dst)
+        return True
+
+    template_text = _read_text_safe(src)
+    existing_text = _read_text_safe(dst)
+
+    if template_text is None or existing_text is None:
+        shutil.copy2(src, dst)
+        return True
+
+    merged_text = _merge_tag_release_env_values(template_text, existing_text)
+
+    if merged_text == existing_text:
+        print(
+            "Info: No effective content changes after preserving "
+            "PROGRAM_NAME/PROGRAM_SRC/PROGRAM_DIR in .github/workflows/tag-release.yml."
+        )
+        return False
+
+    dst.write_text(merged_text, encoding="utf-8")
+    shutil.copystat(src, dst)
+    print(
+        "Info: Preserved existing PROGRAM_NAME/PROGRAM_SRC/PROGRAM_DIR values "
+        "in .github/workflows/tag-release.yml."
+    )
+    return True
 
 
 def get_file_stats(path: Path) -> FileStats:
@@ -147,15 +168,14 @@ def get_file_stats(path: Path) -> FileStats:
 
 
 def make_unified_diff(src: Path, dst: Path) -> str:
-    # Diff is based on normalized text (so ignored lines don't trigger diffs)
     srcText = _read_text_safe(src)
     dstText = _read_text_safe(dst)
 
     if srcText is None or dstText is None:
         return ""
 
-    srcNorm = _normalize_for_compare(src, srcText).splitlines(keepends=True)
-    dstNorm = _normalize_for_compare(dst, dstText).splitlines(keepends=True)
+    srcNorm = srcText.splitlines(keepends=True)
+    dstNorm = dstText.splitlines(keepends=True)
 
     diffLines = difflib.unified_diff(
         dstNorm,
@@ -182,7 +202,7 @@ def files_differ(src: Path, dst: Path, compare: str) -> bool:
         d = make_unified_diff(src, dst)
         return d.strip() != ""
 
-    # default: hash (normalized for compare where needed)
+    # default: hash compare
     return _calc_sha256_for_compare(src) != _calc_sha256_for_compare(dst)
 
 
@@ -195,27 +215,13 @@ def _format_stats(label: str, stats: FileStats) -> str:
     )
 
 
-def _next_backup_path(dst: Path, backup_suffix: str) -> Path:
-    base = Path(str(dst) + backup_suffix)
-    if not base.exists():
-        return base
-
-    i = 1
-    while True:
-        candidate = Path(str(base) + f".{i}")
-        if not candidate.exists():
-            return candidate
-        i += 1
-
-
 def prompt_existing_file_action(
     src: Path,
     dst: Path,
     compare: str,
     show_diff: bool,
-    backup_suffix: str,
 ) -> str:
-    # returns: "skip" | "overwrite" | "backup_overwrite"
+    # returns: "skip" | "overwrite" | "quit"
     srcStats = get_file_stats(src)
     dstStats = get_file_stats(dst)
 
@@ -228,12 +234,9 @@ def prompt_existing_file_action(
     print(_format_stats("  target ", dstStats))
     print(_format_stats("  template", srcStats))
 
-    if _is_tag_release_yml(dst) or _is_tag_release_yml(src):
-        print("Info: PROGRAM_NAME/PROGRAM_SRC/PROGRAM_DIR differences in tag-release.yml are ignored for compare/diff.")
-
     if show_diff and diffText.strip():
         print("")
-        print("----- diff (normalized) -----")
+        print("----- diff -----")
         print(diffText)
         print("-----------------------------")
 
@@ -243,19 +246,14 @@ def prompt_existing_file_action(
 
     while True:
         print("")
-        print("Choose action: [s]kip, [o]verwrite, [b]ackup+overwrite, [d]iff")
+        print("Choose action (case-insensitive): [O]verwrite, [K]eep, [D]iff, [Q]uit")
         choice = input("> ").strip().lower()
 
-        if choice in ["s", "skip", ""]:
+        if choice in ["k", "keep", ""]:
             return "skip"
 
         if choice in ["o", "overwrite"]:
             return "overwrite"
-
-        if choice in ["b", "backup"]:
-            backupPath = _next_backup_path(dst, backup_suffix)
-            print(f"Info: Backup will be created at: {backupPath}")
-            return "backup_overwrite"
 
         if choice in ["d", "diff"]:
             if not diffText:
@@ -263,14 +261,17 @@ def prompt_existing_file_action(
 
             if diffText.strip():
                 print("")
-                print("----- diff (normalized) -----")
+                print("----- diff -----")
                 print(diffText)
                 print("-----------------------------")
             else:
-                print("Info: No text diff available (binary or identical after normalization).")
+                print("Info: No content differences found between template and target file.")
             continue
 
-        print("Warning: Unknown choice. Use s/o/b/d.")
+        if choice in ["q", "quit"]:
+            return "quit"
+
+        print("Warning: Unknown choice. Use O/K/D/Q.")
 
 
 def copy_tree_with_policy(
@@ -279,7 +280,6 @@ def copy_tree_with_policy(
     on_existing: str,
     compare: str,
     show_diff: bool,
-    backup_suffix: str,
 ) -> tuple[int, int, int]:
     """
     Copy src into dst, recursively.
@@ -296,8 +296,16 @@ def copy_tree_with_policy(
         dstFile.parent.mkdir(parents=True, exist_ok=True)
 
         if not dstFile.exists():
-            shutil.copy2(srcFile, dstFile)
-            copied += 1
+            changed = _copy_file_with_special_handling(srcFile, dstFile)
+            if changed:
+                copied += 1
+            else:
+                skipped += 1
+            return
+
+        # If file content is identical, never prompt or overwrite.
+        if _calc_sha256_for_compare(srcFile) == _calc_sha256_for_compare(dstFile):
+            skipped += 1
             return
 
         # dst exists
@@ -306,36 +314,33 @@ def copy_tree_with_policy(
             return
 
         if on_existing == "overwrite":
-            shutil.copy2(srcFile, dstFile)
-            overwritten += 1
+            changed = _copy_file_with_special_handling(srcFile, dstFile)
+            if changed:
+                overwritten += 1
+            else:
+                skipped += 1
             return
 
         # on_existing == "ask"
-        if not files_differ(srcFile, dstFile, compare):
-            skipped += 1
-            return
-
         action = prompt_existing_file_action(
             src=srcFile,
             dst=dstFile,
             compare=compare,
             show_diff=show_diff,
-            backup_suffix=backup_suffix,
         )
 
         if action == "skip":
             skipped += 1
             return
 
-        if action == "backup_overwrite":
-            backupPath = _next_backup_path(dstFile, backup_suffix)
-            shutil.copy2(dstFile, backupPath)
-            shutil.copy2(srcFile, dstFile)
-            overwritten += 1
-            return
+        if action == "quit":
+            raise UserQuitRequested()
 
-        shutil.copy2(srcFile, dstFile)
-        overwritten += 1
+        changed = _copy_file_with_special_handling(srcFile, dstFile)
+        if changed:
+            overwritten += 1
+        else:
+            skipped += 1
 
     if src.is_file():
         handle_file(src, dst)
@@ -372,6 +377,38 @@ def ensure_exec_bits(hooks_dir: Path) -> None:
                 pass
 
 
+def ensure_executable(path: Path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+
+    try:
+        mode = path.stat().st_mode
+        path.chmod(mode | 0o111)
+    except Exception:
+        pass
+
+
+def ensure_pre_commit_hook(template_dir: Path, repo_root: Path, hooks_path: str) -> bool:
+    src_pre_commit = template_dir / "tools/git-hooks/pre-commit"
+    dst_pre_commit = repo_root / hooks_path / "pre-commit"
+
+    if not src_pre_commit.exists() or not src_pre_commit.is_file():
+        print(
+            "Warning: Template pre-commit hook not found at tools/git-hooks/pre-commit.",
+            file=sys.stderr,
+        )
+        return False
+
+    dst_pre_commit.parent.mkdir(parents=True, exist_ok=True)
+
+    if not dst_pre_commit.exists():
+        shutil.copy2(src_pre_commit, dst_pre_commit)
+        print(f"Installed hook file: {hooks_path}/pre-commit")
+
+    ensure_executable(dst_pre_commit)
+    return dst_pre_commit.exists()
+
+
 def set_hooks_path(repo_root: Path, hooks_path: str) -> None:
     # Set hooks path (relative is fine).
     run(["git", "config", "core.hooksPath", hooks_path], cwd=repo_root)
@@ -397,44 +434,56 @@ def apply_self_update_from_template(
     do_update = True
 
     if dst_self.exists():
-        if args.on_existing == "skip":
+        if _calc_sha256_for_compare(tmp_self) == _calc_sha256_for_compare(dst_self):
+            do_update = False
+        elif args.on_existing == "skip":
             do_update = False
         elif args.on_existing == "ask":
-            if files_differ(tmp_self, dst_self, args.compare):
-                action = prompt_existing_file_action(
-                    src=tmp_self,
-                    dst=dst_self,
-                    compare=args.compare,
-                    show_diff=args.show_diff,
-                    backup_suffix=args.backup_suffix,
-                )
-                if action == "skip":
-                    do_update = False
-                elif action == "backup_overwrite":
-                    backupPath = _next_backup_path(dst_self, args.backup_suffix)
-                    shutil.copy2(dst_self, backupPath)
-                    do_update = True
-                else:
-                    do_update = True
-            else:
+            action = prompt_existing_file_action(
+                src=tmp_self,
+                dst=dst_self,
+                compare=args.compare,
+                show_diff=args.show_diff,
+            )
+            if action == "skip":
                 do_update = False
+            elif action == "quit":
+                raise UserQuitRequested()
 
     if not do_update:
         return False
 
-    shutil.copy2(tmp_self, dst_self)
+    changed = _copy_file_with_special_handling(tmp_self, dst_self)
     #-x-update_version_date_header(dst_self)
-    return True
+    return changed
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
     ap = argparse.ArgumentParser(
-        description="Apply mrWheel/templateRepo files to current repo (ask on differences by default) and enable git hooks."
+        description=(
+            "Apply mrWheel/templateRepo files to a target project directory "
+            "(ask on differences by default) and enable git hooks."
+        ),
+        epilog=(
+            "Example:\n"
+            "  ./applyTemplate.py /path/to/project\n"
+            "\n"
+            "If no project path is provided, this script prints help text."
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    ap.add_argument(
+        "project_path",
+        nargs="?",
+        help="Path to the target project root.",
     )
     ap.add_argument(
         "--template",
         default=TEMPLATE_REPO,
-        help=f"Template repo URL (default: {TEMPLATE_REPO})",
+        help=(
+            f"Template repo URL or local template directory (default: {TEMPLATE_REPO}). "
+            "When a local directory is provided, files are read from its current working tree."
+        ),
     )
     ap.add_argument(
         "--paths",
@@ -462,22 +511,27 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--show-diff",
         action="store_true",
-        help="When asking on existing files, show unified diff automatically (normalized for known ignored keys).",
+        help="When asking on existing files, show unified diff automatically.",
     )
-    ap.add_argument(
-        "--backup-suffix",
-        default=".bak",
-        help="Suffix for backups when choosing backup+overwrite (default: .bak)",
-    )
-    return ap.parse_args()
+    return ap, ap.parse_args()
 
 
 def main() -> int:
-    args = parse_args()
-    repo_root = Path.cwd()
+    parser, args = parse_args()
 
-    if not is_git_repo(repo_root):
-        print("Error: This does not look like a git repo root (no .git found). Run from the repo root.", file=sys.stderr)
+    if not args.project_path:
+        print("Template Repo Applier")
+        print("")
+        print("This script applies shared template files to a target project directory.")
+        print("It copies configured paths from the template repo and enables Git hooks.")
+        print("")
+        parser.print_help()
+        return 1
+
+    repo_root = Path(args.project_path).expanduser().resolve()
+
+    if not repo_root.exists() or not repo_root.is_dir():
+        print(f"Error: Project path does not exist or is not a directory: {repo_root}", file=sys.stderr)
         return 2
 
     # Check that git exists
@@ -488,13 +542,22 @@ def main() -> int:
         return 2
 
     self_updated = False
+    pre_commit_ready = False
 
-    with tempfile.TemporaryDirectory(prefix="templateRepo_") as td:
-        tmp = Path(td)
-        template_dir = tmp / "template"
+    try:
+        template_candidate = Path(args.template).expanduser()
+        tmp_ctx: tempfile.TemporaryDirectory[str] | None = None
 
-        print(f"Cloning template: {args.template}")
-        run(["git", "clone", "--depth", "1", args.template, str(template_dir)])
+        if template_candidate.exists() and template_candidate.is_dir():
+            template_dir = template_candidate.resolve()
+            print(f"Using local template working tree: {template_dir}")
+        else:
+            tmp_ctx = tempfile.TemporaryDirectory(prefix="templateRepo_")
+            tmp = Path(tmp_ctx.name)
+            template_dir = tmp / "template"
+
+            print(f"Cloning template: {args.template}")
+            run(["git", "clone", "--depth", "1", args.template, str(template_dir)])
 
         total_copied = 0
         total_skipped = 0
@@ -516,7 +579,6 @@ def main() -> int:
                 on_existing=args.on_existing,
                 compare=args.compare,
                 show_diff=args.show_diff,
-                backup_suffix=args.backup_suffix,
             )
 
             total_copied += copied
@@ -538,14 +600,37 @@ def main() -> int:
         if self_updated:
             print("applyTemplate.py was updated from template.")
 
+        pre_commit_ready = ensure_pre_commit_hook(
+            template_dir=template_dir,
+            repo_root=repo_root,
+            hooks_path=args.hooks_path,
+        )
+    except UserQuitRequested:
+        print("Aborted by user.")
+        return 130
+    finally:
+        if "tmp_ctx" in locals() and tmp_ctx is not None:
+            tmp_ctx.cleanup()
+
     # Enable hooks
     hooks_dir = repo_root / args.hooks_path
-    if hooks_dir.exists():
+    if hooks_dir.exists() and pre_commit_ready:
         ensure_exec_bits(hooks_dir)
-        set_hooks_path(repo_root, args.hooks_path)
-        print(f"Git hooks enabled: core.hooksPath = {args.hooks_path}")
+        try:
+            set_hooks_path(repo_root, args.hooks_path)
+            print(f"Git hooks enabled: core.hooksPath = {args.hooks_path}")
+        except Exception as e:
+            print(
+                f"Warning: Could not set core.hooksPath in target project ({e}).",
+                file=sys.stderr,
+            )
     else:
-        print(f"Warning: Hooks directory not found ({args.hooks_path}); core.hooksPath not set.", file=sys.stderr)
+        print(
+            f"Warning: Hook activation skipped. Ensure {args.hooks_path}/pre-commit exists.",
+            file=sys.stderr,
+        )
+
+    ensure_executable(repo_root / "createProjectStructure.py")
 
     # Also update this file's header date even if only hooks/workflows changed
     #-x-update_version_date_header(repo_root / "applyTemplate.py")

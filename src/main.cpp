@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-02-11 - 14:19 ***/
+/*** Last Changed: 2026-03-08 - 14:56 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -53,11 +53,11 @@ static const uint8_t pinEpdBusy = GPIO_PIN_EPD_BUSY;
 
 // — SPS I2C pins (also used for BMP280)
 static const uint8_t pinSpsSda = GPIO_PIN_SPS30_SDA;
-static const uint8_t pinSpsScl = GPIO_PIN_SPS_SCL;
+static const uint8_t pinSpsScl = GPIO_PIN_SPS30_SCL;
 
-// — SPS UART pins (UART2)
-static const int8_t pinSpsUartTx = GPIO_PIN_SPS_UART_TX;
-static const int8_t pinSpsUartRx = GPIO_PIN_SPS_UART_RX;
+// — PMS UART pins (UART2)
+static const int8_t pinPms5003UartTx = GPIO_PIN_UART_TX2_PMS5003;
+static const int8_t pinPms5003UartRx = GPIO_PIN_UART_RX2_PMS5003;
 
 static HardwareSerial spsUart(2);
 
@@ -84,7 +84,9 @@ static const uint32_t spsPollIntervalMs = 100UL;
 
 // — Switch handling
 static const uint32_t switchDebounceMs = 30UL;
-static const uint32_t switchLongPressMs = 2000UL;
+static const uint32_t switchShortPressMs = 2000UL;
+static const uint32_t switchLongPressMs = 3000UL;
+static const uint32_t switchTaskIntervalMs = 10UL;
 
 // — safeTimers declarations
 DECLARE_TIMER_MS(tWarmupTick, warmupTickMs, SKIP_MISSED_TICKS);
@@ -92,17 +94,23 @@ DECLARE_TIMER_MS(tSampleInterval, sampleIntervalMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tAttemptTimeout, spsAttemptTimeoutMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tSpsPoll, spsPollIntervalMs, SKIP_MISSED_TICKS);
 
-DECLARE_TIMER_MS(tSwitchDebounce, switchDebounceMs, SKIP_MISSED_TICKS);
-DECLARE_TIMER_MS(tLongPress, switchLongPressMs, SKIP_MISSED_TICKS);
-
 // ===================== Display selection =====================
 
 // — 1.54" 200x200 B/W display; full height buffer is fine on ESP32
 static const uint16_t pageHeight = 200;
 
 // — Display driver instance
+#if E_PAPER_VERSION == 1
+// — Old Waveshare panel (IL3829)
 GxEPD2_BW<GxEPD2_154, pageHeight> display(
     GxEPD2_154(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy));
+#elif E_PAPER_VERSION == 2
+// — New Waveshare panel (SSD1681)
+GxEPD2_BW<GxEPD2_154_D67, pageHeight> display(
+    GxEPD2_154_D67(pinEpdCs, pinEpdDc, pinEpdRst, pinEpdBusy));
+#else
+#error "Error: Unsupported DISPLAY_VERSION"
+#endif
 
 // ===================== Fixed layout coordinates =====================
 
@@ -127,20 +135,20 @@ struct UiLayout
 // — 9pt for small lines + PM header
 // — 12pt for PM values
 static const UiLayout ui =
-{
-  4,    // xText
+    {
+        4, // xText
 
-  4,    // PM column 1
-  70,   // PM column 2
-  136,  // PM column 3
+        4,   // PM column 1
+        70,  // PM column 2
+        136, // PM column 3
 
-  26,   // yBattery (9pt) -26-
-  52,   // yEnv (9pt) -48-
+        26, // yBattery (9pt) -26-
+        52, // yEnv (9pt) -48-
 
-  90,   // yPmHeader (9pt) -72-
-  128,  // yPmValues (12pt) -110-
+        90,  // yPmHeader (9pt) -72-
+        128, // yPmValues (12pt) -110-
 
-  184   // yMessage (9pt) -186-
+        184 // yMessage (9pt) -186-
 };
 
 // — UI text fields
@@ -150,6 +158,7 @@ static String pm1Text;
 static String pm25Text;
 static String pm10Text;
 static String messageText;
+static volatile bool displayRefreshInProgress = false;
 
 // ===================== Text helpers =====================
 
@@ -272,11 +281,11 @@ static void i2cScan()
 
 static void spsUartPassthroughInit()
 {
-  // — SPS UART: 115200 8N1
-  spsUart.begin(115200, SERIAL_8N1, pinSpsUartRx, pinSpsUartTx);
+  // — PMS UART: 115200 8N1
+  spsUart.begin(115200, SERIAL_8N1, pinPms5003UartRx, pinPms5003UartTx);
 
-  Serial.printf("SPS UART passthrough on UART2: RX=%d TX=%d\n",
-                (int)pinSpsUartRx, (int)pinSpsUartTx);
+  Serial.printf("PMS UART passthrough on UART2: RX=%d TX=%d\n",
+                (int)pinPms5003UartRx, (int)pinPms5003UartTx);
 
 } //   spsUartPassthroughInit()
 
@@ -508,7 +517,6 @@ static void epdInit()
 
 } //   epdInit()
 
-
 static void uiUpdateLinePartial9pt(int16_t yBaseline, const String& text)
 {
   // — Clear a full-width band and print one line in 9pt
@@ -531,6 +539,7 @@ static void uiUpdateLinePartial9pt(int16_t yBaseline, const String& text)
 
   display.setPartialWindow(x, y, w, h);
 
+  displayRefreshInProgress = true;
   display.firstPage();
   do
   {
@@ -542,6 +551,7 @@ static void uiUpdateLinePartial9pt(int16_t yBaseline, const String& text)
     display.print(text);
 
   } while (display.nextPage());
+  displayRefreshInProgress = false;
 
 } //   uiUpdateLinePartial9pt()
 
@@ -567,6 +577,7 @@ static void uiUpdatePmValuesPartial12pt()
 
   display.setPartialWindow(x, y, w, h);
 
+  displayRefreshInProgress = true;
   display.firstPage();
   do
   {
@@ -585,6 +596,7 @@ static void uiUpdatePmValuesPartial12pt()
     display.print(pm10Text);
 
   } while (display.nextPage());
+  displayRefreshInProgress = false;
 
 } //   uiUpdatePmValuesPartial12pt()
 
@@ -592,6 +604,7 @@ static void uiDrawAllFull()
 {
   display.setFullWindow();
 
+  displayRefreshInProgress = true;
   display.firstPage();
   do
   {
@@ -637,6 +650,7 @@ static void uiDrawAllFull()
     display.print(messageText);
 
   } while (display.nextPage());
+  displayRefreshInProgress = false;
 
 } //   uiDrawAllFull()
 
@@ -844,21 +858,31 @@ static float avgPm10 = 0.0f;
 // — Switch tracking
 static bool switchStableState = HIGH;
 static bool switchLastReading = HIGH;
+static uint32_t switchLastReadingChangeMs = 0;
+static uint32_t switchPressedSinceMs = 0;
+static bool switchLongPressHandled = false;
+static bool ledState = LOW;
+static bool ledAutoOffActive = false;
+static uint32_t ledOnSinceMs = 0;
+static volatile bool switchOffRequested = false;
+
+static TaskHandle_t switchTaskHandle = nullptr;
 
 static void updateSwitch()
 {
   // — Read switch with pull-up logic (LOW means pressed)
   bool reading = (digitalRead(pinSwitch) == LOW) ? LOW : HIGH;
+  uint32_t nowMs = millis();
 
-  // — On edge change, restart debounce timer
+  // — Track raw edges for debounce
   if (reading != switchLastReading)
   {
     switchLastReading = reading;
-    RESTART_TIMER(tSwitchDebounce);
+    switchLastReadingChangeMs = nowMs;
   }
 
-  // — When debounce expires, accept new stable state
-  if (DUE(tSwitchDebounce))
+  // — Accept state change only after debounce interval
+  if ((nowMs - switchLastReadingChangeMs) >= switchDebounceMs)
   {
     if (switchStableState != switchLastReading)
     {
@@ -866,37 +890,76 @@ static void updateSwitch()
 
       if (switchStableState == LOW)
       {
-        // — Press: start long-press timer
-        RESTART_TIMER(tLongPress);
+        // — New press started
+        switchPressedSinceMs = nowMs;
+        switchLongPressHandled = false;
+
+        // — Press always turns LED on; auto-off after short-press window
+        ledState = HIGH;
+        digitalWrite(GPIO_PIN_LED, HIGH);
+        ledAutoOffActive = true;
+        ledOnSinceMs = nowMs;
       }
       else
       {
-        // — Release: restart long-press timer so it cannot instantly fire
-        RESTART_TIMER(tLongPress);
+        // — Released: nothing to do for LED; handled by auto-off timer
       }
     }
   }
 
-  // — Long-press detection while held down
-  if (switchStableState == LOW)
+  // — Auto-off LED 2 seconds after press start
+  if (ledAutoOffActive)
   {
-    if (DUE(tLongPress))
+    if ((nowMs - ledOnSinceMs) >= switchShortPressMs)
     {
-      switchOff();
+      ledAutoOffActive = false;
+      ledState = LOW;
+      digitalWrite(GPIO_PIN_LED, LOW);
+    }
+  }
+
+  // — Long-press detection while held down
+  if ((switchStableState == LOW) && !switchLongPressHandled)
+  {
+    if ((nowMs - switchPressedSinceMs) >= switchLongPressMs)
+    {
+      switchLongPressHandled = true;
+      switchOffRequested = true;
     }
   }
 
 } //   updateSwitch()
 
+static void switchTask(void* parameter)
+{
+  (void)parameter;
+
+  while (true)
+  {
+    updateSwitch();
+    vTaskDelay(pdMS_TO_TICKS(switchTaskIntervalMs));
+  }
+
+} //   switchTask()
+
 // ===================== Main loop helpers =====================
 
 static void serviceBackgroundTasks()
 {
-  // — Keep switch handling and UART passthrough running continuously
-  updateSwitch();
+  // — Keep UART passthrough running continuously
   spsUartPassthroughLoop();
 
 } //   serviceBackgroundTasks()
+
+static void processSwitchOffRequest()
+{
+  if (switchOffRequested && !displayRefreshInProgress)
+  {
+    switchOffRequested = false;
+    switchOff();
+  }
+
+} //   processSwitchOffRequest()
 
 static void handleStateWarmup()
 {
@@ -1195,8 +1258,14 @@ void setup()
   // — Boot logs
   Serial.printf("\n\nAnd then it starts ...\n\n");
   Serial.printf("Firmware version: %s\n", PROG_VERSION);
+  Serial.printf("Latch Pin %u latched (set %s), radios off\n", (unsigned)pinLatch, digitalRead(pinLatch) == HIGH ? "HIGH" : "LOW");
   Serial.printf("Warm-up time: %u seconds\n", (unsigned)warmupSeconds);
   Serial.printf("Max measurements: %u\n", (unsigned)maxMetingen);
+  Serial.flush();
+
+  pinMode(GPIO_PIN_LED, OUTPUT);
+  digitalWrite(GPIO_PIN_LED, LOW);
+  ledState = LOW;
 
   // — Initialize I2C early (required for BMP init and SPS)
   i2cInit();
@@ -1259,19 +1328,34 @@ void setup()
   RESTART_TIMER(tSampleInterval);
   RESTART_TIMER(tAttemptTimeout);
   RESTART_TIMER(tSpsPoll);
-  RESTART_TIMER(tSwitchDebounce);
-  RESTART_TIMER(tLongPress);
 
   // — Initialize switch state tracking
   switchStableState = (digitalRead(pinSwitch) == LOW) ? LOW : HIGH;
   switchLastReading = switchStableState;
+  switchLastReadingChangeMs = millis();
+  switchPressedSinceMs = switchLastReadingChangeMs;
+  switchLongPressHandled = false;
+  ledAutoOffActive = false;
+  ledOnSinceMs = 0;
   updateSwitch();
+
+  // — Run switch handling in a dedicated low-priority task
+  xTaskCreatePinnedToCore(
+      switchTask,
+      "switchTask",
+      2048,
+      nullptr,
+      1,
+      &switchTaskHandle,
+      tskNO_AFFINITY);
 
 } //   setup()
 
 void loop()
 {
   serviceBackgroundTasks();
+  processSwitchOffRequest();
   runMainStateMachine();
+  processSwitchOffRequest();
 
 } //   loop()
