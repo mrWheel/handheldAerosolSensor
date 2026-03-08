@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-08 - 15:00 ***/
+/*** Last Changed: 2026-03-08 - 15:09 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -26,7 +26,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.9.1";
+static const char* PROG_VERSION = "v0.9.2";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
@@ -740,9 +740,26 @@ static bool isValidSample(float pm1, float pm25, float pm10)
 
 static String formatPmLine(float v)
 {
-  // — Format PM value as "123.4"
+  // — PM display formatting:
+  // — <100: one decimal
+  // — 100..999: integer
+  // — >999: show "999"
   char buf[16];
-  snprintf(buf, sizeof(buf), "%.1f", v);
+
+  if (v > 999.0f)
+  {
+    snprintf(buf, sizeof(buf), "999");
+    return String(buf);
+  }
+
+  if (v >= 100.0f)
+  {
+    snprintf(buf, sizeof(buf), "%.0f", v);
+    return String(buf);
+  }
+
+  float belowHundred = (v < 99.9f) ? v : 99.9f;
+  snprintf(buf, sizeof(buf), "%.1f", belowHundred);
   return String(buf);
 
 } //   formatPmLine()
