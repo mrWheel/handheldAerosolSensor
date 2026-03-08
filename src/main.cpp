@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-08 - 15:09 ***/
+/*** Last Changed: 2026-03-08 - 15:20 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -26,8 +26,12 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.9.2";
+static const char* PROG_VERSION = "v0.9.3";
 // —             ^^^^^^^^^^^^^^
+
+#ifndef E_PAPER_ROTATION
+#define E_PAPER_ROTATION 1
+#endif
 
 // ===================== User configuration (from build_flags) =====================
 
@@ -50,6 +54,7 @@ static const uint8_t pinEpdCs = GPIO_PIN_EPD_CS;
 static const uint8_t pinEpdDc = GPIO_PIN_EPD_DC;
 static const uint8_t pinEpdRst = GPIO_PIN_EPD_RST;
 static const uint8_t pinEpdBusy = GPIO_PIN_EPD_BUSY;
+static const uint8_t epdRotation = (uint8_t)E_PAPER_ROTATION;
 
 // — SPS I2C pins (also used for BMP280)
 static const uint8_t pinSpsSda = GPIO_PIN_SPS30_SDA;
@@ -511,7 +516,16 @@ static void epdInit()
   // — Init display (GxEPD2 controls SPI transactions internally)
   display.init(115200, true, 2, false);
 
-  display.setRotation(1);
+  if (epdRotation <= 3)
+  {
+    display.setRotation(epdRotation);
+  }
+  else
+  {
+    Serial.printf("Warning: invalid E_PAPER_ROTATION=%u, fallback to 1\n", (unsigned)epdRotation);
+    display.setRotation(1);
+  }
+
   display.setTextColor(GxEPD_BLACK);
   display.setFullWindow();
 
@@ -729,7 +743,7 @@ static bool isValidSample(float pm1, float pm25, float pm10)
   }
 
   // — Reject obviously out-of-range values
-  if (pm1 > 2000.0f || pm25 > 2000.0f || pm10 > 2000.0f)
+  if (pm1 > 1000.0f || pm25 > 1000.0f || pm10 > 1000.0f)
   {
     return false;
   }
