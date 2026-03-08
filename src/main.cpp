@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-08 - 14:56 ***/
+/*** Last Changed: 2026-03-08 - 15:00 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -26,7 +26,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.9.0";
+static const char* PROG_VERSION = "v0.9.1";
 // —             ^^^^^^^^^^^^^^
 
 // ===================== User configuration (from build_flags) =====================
