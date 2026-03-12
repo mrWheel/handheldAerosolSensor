@@ -1,0 +1,8 @@
+Plotted to '/Users/WillemA/Documents/platformioProjects/handheldAerosolSensor/documents/handheldAerosolSensor.pdf'.
+
+Info: Done.
+Plotted to '/Users/WillemA/Documents/platformioProjects/handheldAerosolSensor/documents/handheldAerosolSensor.pdf'.
+
+Info: Done.
+Info: Done.
+Info: Done.

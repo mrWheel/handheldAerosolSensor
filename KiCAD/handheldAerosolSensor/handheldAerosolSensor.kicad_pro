@@ -706,7 +706,7 @@
       "plot": "",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "",
+      "step": "handheldAerosolSensor.stl",
       "svg": "",
       "vrml": ""
     },
@@ -829,10 +829,6 @@
     [
       "1fe95df2-7edb-4901-8bae-333c3a696969",
       "Root"
-    ],
-    [
-      "30519d6d-aca4-41d5-8ab5-7f42267bc67c",
-      "PowerLatch"
     ]
   ],
   "text_variables": {}

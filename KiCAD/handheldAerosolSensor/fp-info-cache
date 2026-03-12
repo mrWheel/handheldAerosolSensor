@@ -1,4 +1,4 @@
-26725564736486972
+26729111225700936
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -72534,6 +72534,13 @@ Connector
 3
 3
 MyNewLibrary
+AO3401
+
+
+0
+3
+3
+MyNewLibrary
 Arduino_UNO_R3_Shield
 Arduino UNO R3, http://www.mouser.com/pdfdocs/Gravitech_Arduino_Nano3_0.pdf
 Arduino UNO R3
@@ -72575,6 +72582,13 @@ BME280-I2C
 0
 4
 4
+MyNewLibrary
+BSS138
+
+
+0
+3
+3
 MyNewLibrary
 BarrelJack_Wuerth_AaWMod
 Wuerth electronics barrel jack connector (5.5mm outher diameter, inner diameter 2.05mm or 2.55mm depending on exact order number), See: http://katalog.we-online.de/em/datasheet/6941xx301002.pdf
