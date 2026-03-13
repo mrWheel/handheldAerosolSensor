@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-08 - 15:20 ***/
+/*** Last Changed: 2026-03-13 - 09:55 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -26,7 +26,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.9.3";
+static const char* PROG_VERSION = "v0.10.0";
 // —             ^^^^^^^^^^^^^^
 
 #ifndef E_PAPER_ROTATION
@@ -83,6 +83,7 @@ static const float adcVref = (float)ADC_VREF_VOLTAGE;
 
 // — UI + sampling cadence
 static const uint32_t warmupTickMs = 1000UL;
+static const uint32_t warmupSampleIntervalMs = 5000UL;
 static const uint32_t sampleIntervalMs = 2500UL;
 static const uint32_t spsAttemptTimeoutMs = 7000UL;
 static const uint32_t spsPollIntervalMs = 100UL;
@@ -95,6 +96,7 @@ static const uint32_t switchTaskIntervalMs = 10UL;
 
 // — safeTimers declarations
 DECLARE_TIMER_MS(tWarmupTick, warmupTickMs, SKIP_MISSED_TICKS);
+DECLARE_TIMER_MS(tWarmupSampleInterval, warmupSampleIntervalMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tSampleInterval, sampleIntervalMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tAttemptTimeout, spsAttemptTimeoutMs, SKIP_MISSED_TICKS);
 DECLARE_TIMER_MS(tSpsPoll, spsPollIntervalMs, SKIP_MISSED_TICKS);
@@ -701,6 +703,16 @@ static void uiUpdateDynamicAll()
 
 } //   uiUpdateDynamicAll()
 
+static void epdEnterLowPowerMode()
+{
+  // — Ensure panel high-voltage stage is turned off before hard power cut
+  display.powerOff();
+
+  // — Put controller in deep sleep to preserve image contrast until VCC drops
+  display.hibernate();
+
+} //   epdEnterLowPowerMode()
+
 // ===================== SPS helpers =====================
 
 static bool spsInitAndStart()
@@ -787,6 +799,16 @@ static String formatAvgLine(float v, const char* suffix)
 
 } //   formatAvgLine()
 
+// — Very short beep to mark each measurement read
+static void beepBeforeMeasurement(void)
+{
+  tone((uint8_t)GPIO_PIN_BUZZER_PWM, 2200U);
+  delay(12);
+  noTone((uint8_t)GPIO_PIN_BUZZER_PWM);
+  digitalWrite((uint8_t)GPIO_PIN_BUZZER_PWM, LOW);
+
+} //   beepBeforeMeasurement()
+
 // — Play a two-tone beep on the buzzer (blocking)
 static void playTwoToneBeep(uint16_t firstHz, uint16_t firstToneMs, uint16_t secondHz, uint16_t secondToneMs)
 {
@@ -838,6 +860,9 @@ static void switchOff()
   messageText = " ";
   messageText = truncateToChars(messageText, 18);
   uiUpdateMessagePartial();
+
+  // — Put e-paper into low-power mode before cutting board power
+  epdEnterLowPowerMode();
 
   beepBeforeLatchDisable();
 
@@ -994,6 +1019,36 @@ static void processSwitchOffRequest()
 
 static void handleStateWarmup()
 {
+  // — During warmup, show live PM values every 5s without adding to averages
+  if (DUE(tWarmupSampleInterval))
+  {
+    uint16_t ready = 0;
+
+    if (sps30_read_data_ready(&ready) == 0)
+    {
+      if (ready != 0)
+      {
+        struct sps30_measurement m;
+
+        beepBeforeMeasurement();
+
+        if (sps30_read_measurement(&m) == 0)
+        {
+          pm1Text = truncateToChars(formatPmLine(m.mc_1p0), 12);
+          pm25Text = truncateToChars(formatPmLine(m.mc_2p5), 12);
+          pm10Text = truncateToChars(formatPmLine(m.mc_10p0), 12);
+
+          uiUpdatePmPartial();
+
+          Serial.printf("Warmup sample: PM1=%.1f PM2.5=%.1f PM10=%.1f\n",
+                        m.mc_1p0,
+                        m.mc_2p5,
+                        m.mc_10p0);
+        }
+      }
+    }
+  }
+
   if (warmupRemaining == 0)
   {
     // — Reset accumulation at end of warmup
@@ -1114,6 +1169,8 @@ static void handleStateMeasurePollReady()
   }
 
   struct sps30_measurement m;
+
+  beepBeforeMeasurement();
 
   // — Read measurement
   if (sps30_read_measurement(&m) != 0)
@@ -1356,6 +1413,7 @@ void setup()
 
   // — Start timers deterministically
   RESTART_TIMER(tWarmupTick);
+  RESTART_TIMER(tWarmupSampleInterval);
   RESTART_TIMER(tSampleInterval);
   RESTART_TIMER(tAttemptTimeout);
   RESTART_TIMER(tSpsPoll);

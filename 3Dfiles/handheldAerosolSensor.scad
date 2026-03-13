@@ -3,7 +3,7 @@
 //
 //  This is a box for a handheldAerosolSensor
 //
-//  Version 0.1.0 (11-03-2026)
+//  Version 1.0.0 (12-03-2026)
 //
 // This design is parameterized based on the size of a PCB.
 //
@@ -19,9 +19,9 @@ include <./YAPPgenerator_v3.3.8.scad>
 
 $fn=20;
 
-myPcb = "handheldAerosolSensor.stl"; 
+myPcb = "handheldAerosolSensorPCB.stl"; 
 
-if (true)
+if (false)
 {
   translate([56.8, 39.5 , 25.7]) 
   {
@@ -110,16 +110,19 @@ standoffHoleSlack   = 0.4;
 pcb = 
 [
   // Default Main PCB - DO NOT REMOVE the "Main" line.
+  //-- 0,          1,        2, 3, 4,            5,              6,                7,                   8, 9
   ["Main", pcbLength, pcbWidth, 0, 0, pcbThickness, standoffHeight, standoffDiameter, standoffPinDiameter, standoffHoleSlack]
+  //--   0,   1,  2,   3, 4, 5,  6, 7, 8, 9
+ ,["ePaper", 33, 48, 100, 9, 3, -0.1, 5, 2, 0.5]
 
 ];
 
 //-------------------------------------------------------------------                            
 //-- padding between pcb and inside wall
-paddingFront        = 50;
-paddingBack         =  5;
-paddingRight        =  5;
-paddingLeft         =  5;
+paddingFront        = 15;
+paddingBack         = 5;
+paddingRight        = 5;
+paddingLeft         = 5;
 
 //-- Edit these parameters for your own box dimensions
 wallThickness       = 2.0;
@@ -164,8 +167,8 @@ renderQuality             = 8;          //-> from 1 to 32, Default = 8
 
 // --Preview --
 previewQuality            = 5;          //-> from 1 to 32, Default = 5
-showSideBySide            = false;       //-> Default = true
-onLidGap                  = 0;  // tip don't override to animate the lid opening
+showSideBySide            = true;       //-> Default = true
+onLidGap                  = 1;  // tip don't override to animate the lid opening
 colorLid                  = "YellowGreen";   
 alphaLid                  = 1;
 colorBase                 = "BurlyWood";
@@ -292,8 +295,8 @@ pcbStands =
 connectors   =
 [
 //-  0,   1,   2, 3,   4,   5,   6,       7, 8, -rest-
-    [3.5, 3.5, 0, 2.5, 4.5, 3.5, 7, default,    yappBackLeft, yappBackRight, yappCoordPCB, "Main"]
-   ,[-40, 3.5, 0, 2.5, 4.5, 3.5, 7, default, 0, yappFrontLeft, yappFrontRight, yappCoordPCB, "Main"]
+    [3.5, 3.5, 0, 3.2, 6.2, 4.2, 8, default,    yappBackLeft, yappBackRight, yappCoordPCB, "Main"]
+   ,[-25, 3.5, 0, 3.2, 6.2, 4.2, 8, default, 0, yappFrontLeft, yappFrontRight, yappCoordPCB, "Main"]
 
 ];
 
@@ -357,28 +360,27 @@ cutoutsBase =
 
 cutoutsLid  = 
 [
-//         0,     1,  2,  3, 4,               5, 6,  --rest--
-  //[pcbLength+21, 31, 31, 31, 1, yappRoundedRect, default, yappCenter, yappCoordPCB] //-- ePaper Display
-  [pcbLength+29, (shellWidth/2)-2, 31, 36, 1, yappRoundedRect, default, yappCenter, yappCoordBox] //-- ePaper Display
-//        0,     1, 2, 3, 4,          5, --rest--
- ,[pcbLength+8, 9, 4, 4, 2, yappCircle, default, yappCenter, yappCoordPCB] //-- ePaper Mounting Hole
- ,[pcbLength+8, 57, 4, 4, 2, yappCircle, default, yappCenter, yappCoordPCB] //-- ePaper Mounting Hole
- ,[pcbLength+36, 9, 4, 4, 2, yappCircle, default, yappCenter, yappCoordPCB] //-- ePaper Mounting Hole
- ,[pcbLength+36, 57, 4, 4, 2, yappCircle, default, yappCenter, yappCoordPCB] //-- ePaper Mounting Hole
+//      0,     1,  2,  3, 4,               5, 6,  --rest--
+     [100+19, 33, 31, 36, 1, yappRoundedRect, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display
+//--     0,     1,          2, 3, 4,          5,       6,          7, --rest--
+    ,[100+2.5, 9+2.5,       2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[100+2.5, 48+9-2.5,    2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[100+33+2.5, 9+2.5,    2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[100+33+2.5, 48+9-2.5, 2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
 
 ];
 
 cutoutsFront =  
 [
 // 0,  1,  2, 3, 4, 5, 6, --rest--
-  [39, 8, 41, 12, 1, yappRoundedRect, 20, yappCenter, yappCoordBox] //-- SPS30 Air Quality Sensor
+  [39, 8.5, 41, 13, 1, yappRoundedRect, 20, yappCenter, yappCoordBox] //-- SPS30 Air Quality Sensor
 ];
 
 
 cutoutsBack = 
 [
 // 0,  1,  2,  3, 4, 5, 6, --rest--
-  [51, 38, 15, 12, 1, yappRoundedRect, 3, yappCenter, yappCoordBox] //-- USB ESP32 programming port
+  [51, 36, 15, 12, 1, yappRoundedRect, 3, yappCenter, yappCoordBox] //-- USB ESP32 programming port
 ];
 
 cutoutsLeft =   
@@ -503,9 +505,8 @@ lightTubes =
 //-------------------------------------------------------------------
 pushButtons = 
 [
-//   0,  1,  2,  3, 4, 5,   6, 7, 8, --rest--
-// [64, 34, 15, 15, 7, 2.5, 5, 2, 5, 24.5, yappCircle, 0, default, default, default, default, yappCoordPCB]
-   [63.5, 34.0, 15, 15, 7, 2.5, 5, 2, 5, 24.5, yappCircle, 0, default, default, default, default, yappCoordPCB]
+//   0,    1,    2,  3, 4, 5,   6, 7, 8, --rest--
+   [63.5, 34.0, 15, 15, 7, 2.5, 6, 2, 5, 24.5, yappCircle, 0, default, default, default, default, yappCoordPCB]
 ];
              
 //===================================================================
@@ -627,22 +628,7 @@ module hookLidInside()
 // origin = box(0,0,shellHeight)
 module hookLidOutside()
 {
-  /***
-  //-- bottom
-  translate([-10,(shellInsideWidth/2)-(48/2),100]) color("red") rotate([0,90,0]) cube ([1,1,200]);  
-  //-- center
-  translate([-10,shellInsideWidth/2,100]) color("red") rotate([0,90,0]) cube ([1,1,200]);  
-  //-- top
-  translate([-10,(shellInsideWidth/2)+(48/2),100]) color("red") rotate([0,90,0]) cube ([1,1,200]);  
-  //=========================================
-  //-- left
-  translate([126.5-(28/2),80,10]) color("blue") rotate([90,90,0]) cube ([1,1,90]);  
-  //-- center
-  translate([126.5,80,10]) color("blue") rotate([90,90,0]) cube ([1,1,90]);  
-  //-- right
-  translate([126.5+(28/2),80,10]) color("blue") rotate([90,90,0]) cube ([1,1,90]);  
-  ***/
-  
+ 
 } // hookLidOutside()
 
 //===========================================================
@@ -651,11 +637,11 @@ module hookLidOutside()
 module hookBaseInside()
 {
   //-- Left wall
-  translate([160,14.5,0]) color("black") rotate([0,0,90]) cube ([2,42,10]);  
+  translate([151.5,14.5,0]) color("black") rotate([0,0,90]) cube ([2,41,13]);  
   //-- Back wall
-   translate([118,32,0]) color("black") rotate([0,0,0]) cube ([2,26,10]);  
+   translate([108,33.5,0]) color("white") rotate([0,0,0]) cube ([2,26,13]);  
   //-- Right wall
-  translate([160,57.5,0]) color("black") rotate([0,0,90]) cube ([2,42,10]);  
+  translate([151.5,57.5,0]) color("black") rotate([0,0,90]) cube ([2,42,13]);  
 
 } // hookBaseInside()
 
