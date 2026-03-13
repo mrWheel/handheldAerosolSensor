@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-13 - 10:21 ***/
+/*** Last Changed: 2026-03-13 - 10:58 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -26,7 +26,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.10.1";
+static const char* PROG_VERSION = "v0.10.2";
 // —             ^^^^^^^^^^^^^^
 
 #ifndef E_PAPER_ROTATION
@@ -175,6 +175,8 @@ static String pm1Text;
 static String pm25Text;
 static String pm10Text;
 static String messageText;
+static uint8_t batteryPercentLast = 0;
+static float batteryVoltageLast = 0.0f;
 static volatile bool displayRefreshInProgress = false;
 
 // ===================== Text helpers =====================
@@ -434,9 +436,9 @@ static uint8_t batteryPercentFromVoltage(float vbat)
 
 static String formatBatteryLine(float vbat, uint8_t pct)
 {
-  // — Example: "4.02V 78%"
+  // — Example: "4.1V (78%)"
   char buf[48];
-  snprintf(buf, sizeof(buf), "%.2fV %u%%", vbat, pct);
+  snprintf(buf, sizeof(buf), "%.1fV (%u%%)", vbat, pct);
   return String(buf);
 
 } //   formatBatteryLine()
@@ -446,6 +448,9 @@ static void updateBatteryNow(const char* reason)
   // — Read and render battery line immediately
   float vbat = readBatteryVoltage();
   uint8_t pct = batteryPercentFromVoltage(vbat);
+
+  batteryVoltageLast = vbat;
+  batteryPercentLast = pct;
 
   batteryText = formatBatteryLine(vbat, pct);
   batteryText = truncateToChars(batteryText, 12);
@@ -760,7 +765,38 @@ static void uiUpdatePmPartial()
 
 static void uiUpdateMessagePartial()
 {
-  uiUpdateLinePartial9pt(ui.yMessage, messageText);
+  // — Clear from status band down to panel bottom to remove descender artifacts
+  int16_t x = 0;
+  int16_t y = ui.yMessage - 24;
+  int16_t w = display.width();
+  int16_t h = display.height() - y;
+
+  if (y < 0)
+  {
+    y = 0;
+    h = display.height();
+  }
+
+  if (h < 1)
+  {
+    h = 1;
+  }
+
+  display.setPartialWindow(x, y, w, h);
+
+  displayRefreshInProgress = true;
+  display.firstPage();
+  do
+  {
+    display.fillRect(x, y, w, h, GxEPD_WHITE);
+
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(ui.xText, ui.yMessage);
+    display.print(messageText);
+
+  } while (display.nextPage());
+  displayRefreshInProgress = false;
 
 } //   uiUpdateMessagePartial()
 
@@ -1130,19 +1166,29 @@ static void beepBeforeLatchDisable(void)
 
 // ===================== Power off =====================
 
-static void switchOff()
+static void switchOff(const char* overrideMessage = nullptr)
 {
   // — Update battery and env readings right before unlatching power
   updateBatteryNow("pre-off");
   updateEnvNow("pre-off");
 
-  uiUpdateBatteryPartial();
-  uiUpdateEnvPartial();
+  // — Show optional forced shutdown message
+  if ((overrideMessage != nullptr) && (overrideMessage[0] != '\0'))
+  {
+    messageText = String(overrideMessage);
+  }
+  // — Show battery warning before shutdown when battery is below 3.6V
+  else if (batteryVoltageLast < 3.6f)
+  {
+    messageText = "BATTERY LOW";
+  }
+  else
+  {
+    messageText = " ";
+  }
 
-  // — Show message before power-down
-  messageText = " ";
   messageText = truncateToChars(messageText, 18);
-  uiUpdateMessagePartial();
+  uiDrawAllFull();
 
   // — Put e-paper into low-power mode before cutting board power
   epdEnterLowPowerMode();
@@ -1355,10 +1401,6 @@ static void handleStateWarmup()
   {
     warmupRemaining--;
 
-    // — Update env line during warmup
-    updateEnvNow("warmup");
-    uiUpdateEnvPartial();
-
     messageText = String("Warmup: ") + String((unsigned)warmupRemaining) + "s";
     messageText = truncateToChars(messageText, 18);
     uiUpdateMessagePartial();
@@ -1395,10 +1437,6 @@ static void handleStateMeasureStartAttempt()
   }
 
   attemptIndex++;
-
-  // — Refresh env line occasionally while sampling
-  updateEnvNow("sample");
-  uiUpdateEnvPartial();
 
   // — Show attempt progress
   {
@@ -1494,16 +1532,6 @@ static void handleStateShowResults()
   pm1Text = truncateToChars(formatPmLine(avgPm1), 8);
   pm25Text = truncateToChars(formatPmLine(avgPm25), 8);
   pm10Text = truncateToChars(formatPmLine(avgPm10), 8);
-
-  {
-    AirStatus st = classifyPm25(avgPm25);
-    messageText = String("Done: ") + String(statusText(st));
-  }
-
-  messageText = truncateToChars(messageText, 18);
-
-  // — Full refresh before final screen
-  uiDrawAllFull();
 
   particleSensorStop();
   mainState = STATE_POWER_DOWN;
@@ -1648,6 +1676,13 @@ void setup()
 
   // — Full-screen initial draw (no title, 12pt everywhere)
   uiDrawAllFull();
+
+  // — Protect battery from deep discharge at startup
+  if (batteryVoltageLast < 3.4f)
+  {
+    switchOff("BATTERY TO LOW");
+    return;
+  }
 
   // — Initialize particle sensor with automatic fallback
   if (!particleSensorInitAndStart(sps30SeenOnI2c))
