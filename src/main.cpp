@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-13 - 09:55 ***/
+/*** Last Changed: 2026-03-13 - 10:21 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -26,7 +26,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.10.0";
+static const char* PROG_VERSION = "v0.10.1";
 // —             ^^^^^^^^^^^^^^
 
 #ifndef E_PAPER_ROTATION
@@ -63,8 +63,18 @@ static const uint8_t pinSpsScl = GPIO_PIN_SPS30_SCL;
 // — PMS UART pins (UART2)
 static const int8_t pinPms5003UartTx = GPIO_PIN_UART_TX2_PMS5003;
 static const int8_t pinPms5003UartRx = GPIO_PIN_UART_RX2_PMS5003;
+static const uint8_t pinPms5003Set = GPIO_PIN_PMS5003_SET;
+static const uint8_t pinPms5003Reset = GPIO_PIN_PMS5003_RESET;
 
 static HardwareSerial spsUart(2);
+
+enum ParticleSensorType
+{
+  SENSOR_TYPE_SPS30,
+  SENSOR_TYPE_PMS5003
+};
+
+static ParticleSensorType activeParticleSensor = SENSOR_TYPE_SPS30;
 
 // — BMP280 instance
 static Adafruit_BMP280 bmp;
@@ -155,7 +165,7 @@ static const UiLayout ui =
         90,  // yPmHeader (9pt) -72-
         128, // yPmValues (12pt) -110-
 
-        184 // yMessage (9pt) -186-
+        183 // yMessage (9pt) -186-
 };
 
 // — UI text fields
@@ -259,11 +269,12 @@ static void i2cInit()
 
 } //   i2cInit()
 
-static void i2cScan()
+static bool i2cScanHasAddress(uint8_t targetAddr)
 {
   Serial.printf("I2C scan start\n");
 
   uint8_t found = 0;
+  bool targetFound = false;
 
   for (uint8_t addr = 1; addr < 127; addr++)
   {
@@ -274,6 +285,11 @@ static void i2cScan()
     {
       Serial.printf("I2C device found at 0x%02X\n", (unsigned)addr);
       found++;
+
+      if (addr == targetAddr)
+      {
+        targetFound = true;
+      }
     }
 
     delay(2);
@@ -282,7 +298,9 @@ static void i2cScan()
 
   Serial.printf("I2C scan done (%u devices)\n", (unsigned)found);
 
-} //   i2cScan()
+  return targetFound;
+
+} //   i2cScanHasAddress()
 
 // ===================== UART passthrough =====================
 
@@ -616,6 +634,58 @@ static void uiUpdatePmValuesPartial12pt()
 
 } //   uiUpdatePmValuesPartial12pt()
 
+static void uiUpdatePmTextCenteredPartial12pt(const String& text)
+{
+  // — Clear PM values band and draw one centered text line in 12pt
+  const int16_t bandHeight = 36;
+
+  int16_t x = 0;
+  int16_t y = ui.yPmValues - bandHeight + 4;
+  int16_t w = display.width();
+  int16_t h = bandHeight;
+
+  if (y < 0)
+  {
+    y = 0;
+  }
+
+  if ((y + h) > display.height())
+  {
+    h = display.height() - y;
+  }
+
+  int16_t textX = ui.xPmCol1;
+  int16_t textBoundsX = 0;
+  int16_t textBoundsY = 0;
+  uint16_t textBoundsW = 0;
+  uint16_t textBoundsH = 0;
+
+  display.setFont(&FreeMonoBold12pt7b);
+  display.getTextBounds(text.c_str(), 0, ui.yPmValues, &textBoundsX, &textBoundsY, &textBoundsW, &textBoundsH);
+
+  if (textBoundsW < (uint16_t)display.width())
+  {
+    textX = (((int16_t)display.width() - (int16_t)textBoundsW) / 2) - textBoundsX;
+  }
+
+  display.setPartialWindow(x, y, w, h);
+
+  displayRefreshInProgress = true;
+  display.firstPage();
+  do
+  {
+    display.fillRect(x, y, w, h, GxEPD_WHITE);
+
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(textX, ui.yPmValues);
+    display.print(text);
+
+  } while (display.nextPage());
+  displayRefreshInProgress = false;
+
+} //   uiUpdatePmTextCenteredPartial12pt()
+
 static void uiDrawAllFull()
 {
   display.setFullWindow();
@@ -739,6 +809,219 @@ static void spsStop()
   (void)sps30_stop_measurement();
 
 } //   spsStop()
+
+static bool pms5003InitAndStart()
+{
+  // — PMS5003 UART is fixed at 9600 8N1
+  spsUart.begin(9600, SERIAL_8N1, pinPms5003UartRx, pinPms5003UartTx);
+
+  // — SET and RESET are active-low control pins
+  pinMode(pinPms5003Set, OUTPUT);
+  pinMode(pinPms5003Reset, OUTPUT);
+  digitalWrite(pinPms5003Set, HIGH);
+  digitalWrite(pinPms5003Reset, HIGH);
+
+  delay(100);
+
+  if (pinPms5003Reset == GPIO_PIN_LED)
+  {
+    Serial.printf("Warning: PMS5003 RESET shares GPIO_PIN_LED=%u\n", (unsigned)GPIO_PIN_LED);
+  }
+
+  Serial.printf("PMS5003 UART active: RX=%d TX=%d SET=%u RESET=%u\n",
+                (int)pinPms5003UartRx,
+                (int)pinPms5003UartTx,
+                (unsigned)pinPms5003Set,
+                (unsigned)pinPms5003Reset);
+
+  return true;
+
+} //   pms5003InitAndStart()
+
+static void pms5003Stop()
+{
+  // — Put PMS5003 into sleep mode before hard power cut
+  digitalWrite(pinPms5003Set, LOW);
+
+} //   pms5003Stop()
+
+static bool pms5003ReadMeasurement(float* pm1, float* pm25, float* pm10)
+{
+  static uint8_t frame[32];
+  static uint8_t idx = 0;
+
+  while (spsUart.available() > 0)
+  {
+    uint8_t b = (uint8_t)spsUart.read();
+
+    if (idx == 0)
+    {
+      if (b != 0x42)
+      {
+        continue;
+      }
+
+      frame[idx++] = b;
+      continue;
+    }
+
+    if (idx == 1)
+    {
+      if (b != 0x4D)
+      {
+        idx = 0;
+        continue;
+      }
+
+      frame[idx++] = b;
+      continue;
+    }
+
+    frame[idx++] = b;
+
+    if (idx < (uint8_t)sizeof(frame))
+    {
+      continue;
+    }
+
+    idx = 0;
+
+    uint16_t frameLen = ((uint16_t)frame[2] << 8) | (uint16_t)frame[3];
+    if (frameLen != 28)
+    {
+      continue;
+    }
+
+    uint16_t checksum = 0;
+    for (uint8_t i = 0; i < 30; i++)
+    {
+      checksum = (uint16_t)(checksum + frame[i]);
+    }
+
+    uint16_t checksumRx = ((uint16_t)frame[30] << 8) | (uint16_t)frame[31];
+    if (checksum != checksumRx)
+    {
+      continue;
+    }
+
+    uint16_t pm1Atm = ((uint16_t)frame[10] << 8) | (uint16_t)frame[11];
+    uint16_t pm25Atm = ((uint16_t)frame[12] << 8) | (uint16_t)frame[13];
+    uint16_t pm10Atm = ((uint16_t)frame[14] << 8) | (uint16_t)frame[15];
+
+    *pm1 = (float)pm1Atm;
+    *pm25 = (float)pm25Atm;
+    *pm10 = (float)pm10Atm;
+    return true;
+  }
+
+  return false;
+
+} //   pms5003ReadMeasurement()
+
+static bool pms5003Probe(uint32_t timeoutMs)
+{
+  uint32_t startMs = millis();
+
+  while ((millis() - startMs) < timeoutMs)
+  {
+    float pm1 = 0.0f;
+    float pm25 = 0.0f;
+    float pm10 = 0.0f;
+
+    if (pms5003ReadMeasurement(&pm1, &pm25, &pm10))
+    {
+      Serial.printf("PMS5003 probe OK: PM1=%.1f PM2.5=%.1f PM10=%.1f\n", pm1, pm25, pm10);
+      return true;
+    }
+
+    delay(20);
+    yield();
+  }
+
+  Serial.printf("PMS5003 probe timeout\n");
+  return false;
+
+} //   pms5003Probe()
+
+static bool particleSensorInitAndStart(bool sps30SeenOnI2c)
+{
+  if (sps30SeenOnI2c)
+  {
+    if (spsInitAndStart())
+    {
+      activeParticleSensor = SENSOR_TYPE_SPS30;
+      Serial.printf("Particle sensor selected: SPS30 (I2C)\n");
+      return true;
+    }
+
+    Serial.printf("SPS30 seen on I2C, but init failed. Trying PMS5003 fallback.\n");
+  }
+  else
+  {
+    Serial.printf("SPS30 not found on I2C scan. Trying PMS5003 fallback.\n");
+  }
+
+  if (pms5003InitAndStart())
+  {
+    if (pms5003Probe(2500UL))
+    {
+      activeParticleSensor = SENSOR_TYPE_PMS5003;
+      Serial.printf("Particle sensor selected: PMS5003 (UART2)\n");
+      return true;
+    }
+
+    pms5003Stop();
+    Serial.printf("PMS5003 not detected on UART2\n");
+  }
+
+  return false;
+
+} //   particleSensorInitAndStart()
+
+static void particleSensorStop()
+{
+  if (activeParticleSensor == SENSOR_TYPE_SPS30)
+  {
+    spsStop();
+    return;
+  }
+
+  pms5003Stop();
+
+} //   particleSensorStop()
+
+static bool particleSensorReadMeasurement(float* pm1, float* pm25, float* pm10)
+{
+  if (activeParticleSensor == SENSOR_TYPE_SPS30)
+  {
+    uint16_t ready = 0;
+
+    if (sps30_read_data_ready(&ready) != 0)
+    {
+      return false;
+    }
+
+    if (ready == 0)
+    {
+      return false;
+    }
+
+    struct sps30_measurement m;
+
+    if (sps30_read_measurement(&m) != 0)
+    {
+      return false;
+    }
+
+    *pm1 = m.mc_1p0;
+    *pm25 = m.mc_2p5;
+    *pm10 = m.mc_10p0;
+    return true;
+  }
+
+  return pms5003ReadMeasurement(pm1, pm25, pm10);
+
+} //   particleSensorReadMeasurement()
 
 static bool isValidSample(float pm1, float pm25, float pm10)
 {
@@ -1003,7 +1286,10 @@ static void switchTask(void* parameter)
 static void serviceBackgroundTasks()
 {
   // — Keep UART passthrough running continuously
-  spsUartPassthroughLoop();
+  if (activeParticleSensor == SENSOR_TYPE_SPS30)
+  {
+    spsUartPassthroughLoop();
+  }
 
 } //   serviceBackgroundTasks()
 
@@ -1022,30 +1308,22 @@ static void handleStateWarmup()
   // — During warmup, show live PM values every 5s without adding to averages
   if (DUE(tWarmupSampleInterval))
   {
-    uint16_t ready = 0;
+    float pm1 = 0.0f;
+    float pm25 = 0.0f;
+    float pm10 = 0.0f;
 
-    if (sps30_read_data_ready(&ready) == 0)
+    if (particleSensorReadMeasurement(&pm1, &pm25, &pm10))
     {
-      if (ready != 0)
-      {
-        struct sps30_measurement m;
+      pm1Text = truncateToChars(formatPmLine(pm1), 12);
+      pm25Text = truncateToChars(formatPmLine(pm25), 12);
+      pm10Text = truncateToChars(formatPmLine(pm10), 12);
 
-        beepBeforeMeasurement();
+      uiUpdatePmPartial();
 
-        if (sps30_read_measurement(&m) == 0)
-        {
-          pm1Text = truncateToChars(formatPmLine(m.mc_1p0), 12);
-          pm25Text = truncateToChars(formatPmLine(m.mc_2p5), 12);
-          pm10Text = truncateToChars(formatPmLine(m.mc_10p0), 12);
-
-          uiUpdatePmPartial();
-
-          Serial.printf("Warmup sample: PM1=%.1f PM2.5=%.1f PM10=%.1f\n",
-                        m.mc_1p0,
-                        m.mc_2p5,
-                        m.mc_10p0);
-        }
-      }
+      Serial.printf("Warmup sample: PM1=%.1f PM2.5=%.1f PM10=%.1f\n",
+                    pm1,
+                    pm25,
+                    pm10);
     }
   }
 
@@ -1060,6 +1338,9 @@ static void handleStateWarmup()
 
     // — Start measurement cycle cleanly
     RESTART_TIMER(tSampleInterval);
+
+    // — Single short beep when warmup is finished
+    beepBeforeMeasurement();
 
     messageText = "Measuring...";
     messageText = truncateToChars(messageText, 18);
@@ -1155,36 +1436,15 @@ static void handleStateMeasurePollReady()
     return;
   }
 
-  uint16_t ready = 0;
+  float pm1 = 0.0f;
+  float pm25 = 0.0f;
+  float pm10 = 0.0f;
 
-  // — Read data-ready flag
-  if (sps30_read_data_ready(&ready) != 0)
+  // — Read one measurement from active sensor
+  if (!particleSensorReadMeasurement(&pm1, &pm25, &pm10))
   {
     return;
   }
-
-  if (ready == 0)
-  {
-    return;
-  }
-
-  struct sps30_measurement m;
-
-  beepBeforeMeasurement();
-
-  // — Read measurement
-  if (sps30_read_measurement(&m) != 0)
-  {
-    messageText = "Read failed";
-    messageText = truncateToChars(messageText, 18);
-    uiUpdateMessagePartial();
-    mainState = STATE_MEASURE_WAIT_NEXT;
-    return;
-  }
-
-  float pm1 = m.mc_1p0;
-  float pm25 = m.mc_2p5;
-  float pm10 = m.mc_10p0;
 
   // — Always show current measurement values
   pm1Text = truncateToChars(formatPmLine(pm1), 12);
@@ -1245,14 +1505,14 @@ static void handleStateShowResults()
   // — Full refresh before final screen
   uiDrawAllFull();
 
-  spsStop();
+  particleSensorStop();
   mainState = STATE_POWER_DOWN;
 
 } //   handleStateShowResults()
 
 static void handleStateError()
 {
-  spsStop();
+  particleSensorStop();
   mainState = STATE_POWER_DOWN;
 
 } //   handleStateError()
@@ -1340,9 +1600,6 @@ void setup()
   // — Discard first ADC read to settle
   (void)analogRead(pinBatAdc);
 
-  // — UART passthrough (debug)
-  spsUartPassthroughInit();
-
   // — Boot logs
   Serial.printf("\n\nAnd then it starts ...\n\n");
   Serial.printf("Firmware version: %s\n", PROG_VERSION);
@@ -1359,7 +1616,7 @@ void setup()
   i2cInit();
 
   // — Bring-up diagnostics
-  i2cScan();
+  bool sps30SeenOnI2c = i2cScanHasAddress(0x69);
 
   // — Initialize BMP and read immediately
   bmpOk = bmpInit();
@@ -1392,11 +1649,14 @@ void setup()
   // — Full-screen initial draw (no title, 12pt everywhere)
   uiDrawAllFull();
 
-  // — Initialize SPS and decide state
-  if (!spsInitAndStart())
+  // — Initialize particle sensor with automatic fallback
+  if (!particleSensorInitAndStart(sps30SeenOnI2c))
   {
-    Serial.printf("Error: SPS not found\n");
-    messageText = "ERROR: SPS missing";
+    Serial.printf("Error: no particle sensor available\n");
+
+    uiUpdatePmTextCenteredPartial12pt(String("NO SENSOR"));
+
+    messageText = "";
     messageText = truncateToChars(messageText, 18);
     uiUpdateMessagePartial();
     delay(2000);
