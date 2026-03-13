@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-13 - 10:58 ***/
+/*** Last Changed: 2026-03-13 - 12:21 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -7,6 +7,8 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <esp_bt.h>
+
+#include "WiFiManagerExt.h"
 
 // — Display
 #include <GxEPD2_BW.h>
@@ -26,7 +28,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.10.2";
+static const char* PROG_VERSION = "v0.10.3";
 // —             ^^^^^^^^^^^^^^
 
 #ifndef E_PAPER_ROTATION
@@ -75,6 +77,7 @@ enum ParticleSensorType
 };
 
 static ParticleSensorType activeParticleSensor = SENSOR_TYPE_SPS30;
+static WiFiManagerExt wifiManagerExt;
 
 // — BMP280 instance
 static Adafruit_BMP280 bmp;
@@ -102,6 +105,7 @@ static const uint32_t spsPollIntervalMs = 100UL;
 static const uint32_t switchDebounceMs = 30UL;
 static const uint32_t switchShortPressMs = 2000UL;
 static const uint32_t switchLongPressMs = 3000UL;
+static const uint32_t switchMultiPressWindowMs = 1500UL;
 static const uint32_t switchTaskIntervalMs = 10UL;
 
 // — safeTimers declarations
@@ -745,6 +749,78 @@ static void uiDrawAllFull()
 
 } //   uiDrawAllFull()
 
+static void uiDrawWaitingForUpdateFull(const String& hostName, const String& ipAddress)
+{
+  display.setFullWindow();
+
+  displayRefreshInProgress = true;
+  display.firstPage();
+  do
+  {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(ui.xText, 70);
+    display.print("WAITING FOR");
+
+    display.setCursor(ui.xText, 96);
+    display.print("UPDATE");
+
+    display.setCursor(ui.xText, 136);
+    display.print(hostName);
+
+    display.setCursor(ui.xText, 164);
+    display.print(ipAddress);
+
+  } while (display.nextPage());
+  displayRefreshInProgress = false;
+
+} //   uiDrawWaitingForUpdateFull()
+
+static void uiDrawCenteredLine9pt(int16_t yBaseline, const String& text)
+{
+  int16_t textBoundsX = 0;
+  int16_t textBoundsY = 0;
+  uint16_t textBoundsW = 0;
+  uint16_t textBoundsH = 0;
+
+  display.setFont(&FreeMonoBold9pt7b);
+  display.getTextBounds(text.c_str(), 0, yBaseline, &textBoundsX, &textBoundsY, &textBoundsW, &textBoundsH);
+
+  int16_t textX = ui.xText;
+  if (textBoundsW < (uint16_t)display.width())
+  {
+    textX = (((int16_t)display.width() - (int16_t)textBoundsW) / 2) - textBoundsX;
+  }
+
+  display.setCursor(textX, yBaseline);
+  display.print(text);
+
+} //   uiDrawCenteredLine9pt()
+
+static void uiDrawWifiPortalStartedFull(const String& apName)
+{
+  display.setFullWindow();
+
+  displayRefreshInProgress = true;
+  display.firstPage();
+  do
+  {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+
+    uiDrawCenteredLine9pt(52, String("WiFi Portal"));
+    uiDrawCenteredLine9pt(78, String("Started"));
+    uiDrawCenteredLine9pt(104, String("Waiting for user"));
+    uiDrawCenteredLine9pt(130, String("input"));
+    uiDrawCenteredLine9pt(156, apName);
+
+  } while (display.nextPage());
+  displayRefreshInProgress = false;
+
+} //   uiDrawWifiPortalStartedFull()
+
 static void uiUpdateBatteryPartial()
 {
   uiUpdateLinePartial9pt(ui.yBattery, String("Bat: ") + batteryText);
@@ -1164,10 +1240,46 @@ static void beepBeforeLatchDisable(void)
 
 } //   beepBeforeLatchDisable()
 
+// ===================== WiFi + OTA callbacks =====================
+
+static void onWifiPortalStarted(const String& apName)
+{
+  uiDrawWifiPortalStartedFull(apName);
+
+} //   onWifiPortalStarted()
+
+static void onOtaStarted()
+{
+  messageText = "UPDATING";
+  messageText = truncateToChars(messageText, 18);
+  uiDrawAllFull();
+
+} //   onOtaStarted()
+
+static void onOtaEnded()
+{
+  messageText = "OTA READY";
+  messageText = truncateToChars(messageText, 18);
+  uiUpdateMessagePartial();
+
+} //   onOtaEnded()
+
+static void onWifiConnected(const String& hostName, const String& ipAddress)
+{
+  uiDrawWaitingForUpdateFull(hostName, ipAddress);
+
+} //   onWifiConnected()
+
 // ===================== Power off =====================
 
 static void switchOff(const char* overrideMessage = nullptr)
 {
+  // — Never release latch while OTA update is active
+  if (wifiManagerExt.isOtaInProgress())
+  {
+    return;
+  }
+
   // — Update battery and env readings right before unlatching power
   updateBatteryNow("pre-off");
   updateEnvNow("pre-off");
@@ -1250,6 +1362,9 @@ static bool ledState = LOW;
 static bool ledAutoOffActive = false;
 static uint32_t ledOnSinceMs = 0;
 static volatile bool switchOffRequested = false;
+static volatile bool wifiStartRequested = false;
+static uint8_t switchShortPressCount = 0;
+static uint32_t switchFirstShortPressMs = 0;
 
 static TaskHandle_t switchTaskHandle = nullptr;
 
@@ -1287,7 +1402,28 @@ static void updateSwitch()
       }
       else
       {
-        // — Released: nothing to do for LED; handled by auto-off timer
+        // — Released: detect short-press burst for WiFi start
+        if (!switchLongPressHandled)
+        {
+          uint32_t pressDurationMs = nowMs - switchPressedSinceMs;
+
+          if (pressDurationMs < switchLongPressMs)
+          {
+            if ((switchShortPressCount == 0) || ((nowMs - switchFirstShortPressMs) > switchMultiPressWindowMs))
+            {
+              switchShortPressCount = 0;
+              switchFirstShortPressMs = nowMs;
+            }
+
+            switchShortPressCount++;
+
+            if (switchShortPressCount >= 3)
+            {
+              switchShortPressCount = 0;
+              wifiStartRequested = true;
+            }
+          }
+        }
       }
     }
   }
@@ -1309,6 +1445,7 @@ static void updateSwitch()
     if ((nowMs - switchPressedSinceMs) >= switchLongPressMs)
     {
       switchLongPressHandled = true;
+      switchShortPressCount = 0;
       switchOffRequested = true;
     }
   }
@@ -1341,6 +1478,11 @@ static void serviceBackgroundTasks()
 
 static void processSwitchOffRequest()
 {
+  if (wifiManagerExt.isOtaInProgress())
+  {
+    return;
+  }
+
   if (switchOffRequested && !displayRefreshInProgress)
   {
     switchOffRequested = false;
@@ -1348,6 +1490,25 @@ static void processSwitchOffRequest()
   }
 
 } //   processSwitchOffRequest()
+
+static void processWifiStartRequest()
+{
+  if (!wifiStartRequested)
+  {
+    return;
+  }
+
+  wifiStartRequested = false;
+
+  // — Show portal start intent immediately, independent of callback timing
+  {
+    String apName = wifiManagerExt.getApNamePreview();
+    uiDrawWifiPortalStartedFull(apName);
+  }
+
+  wifiManagerExt.requestStart();
+
+} //   processWifiStartRequest()
 
 static void handleStateWarmup()
 {
@@ -1677,6 +1838,12 @@ void setup()
   // — Full-screen initial draw (no title, 12pt everywhere)
   uiDrawAllFull();
 
+  // — Initialize WiFi/OTA manager callbacks
+  wifiManagerExt.setPortalStartCallback(onWifiPortalStarted);
+  wifiManagerExt.setConnectedCallback(onWifiConnected);
+  wifiManagerExt.setOtaStartCallback(onOtaStarted);
+  wifiManagerExt.setOtaEndCallback(onOtaEnded);
+
   // — Protect battery from deep discharge at startup
   if (batteryVoltageLast < 3.4f)
   {
@@ -1719,6 +1886,8 @@ void setup()
   switchLastReadingChangeMs = millis();
   switchPressedSinceMs = switchLastReadingChangeMs;
   switchLongPressHandled = false;
+  switchShortPressCount = 0;
+  switchFirstShortPressMs = 0;
   ledAutoOffActive = false;
   ledOnSinceMs = 0;
   updateSwitch();
@@ -1738,7 +1907,16 @@ void setup()
 void loop()
 {
   serviceBackgroundTasks();
+  processWifiStartRequest();
+  wifiManagerExt.handle();
   processSwitchOffRequest();
+
+  if (wifiManagerExt.isServiceModeActive())
+  {
+    delay(2);
+    return;
+  }
+
   runMainStateMachine();
   processSwitchOffRequest();
 

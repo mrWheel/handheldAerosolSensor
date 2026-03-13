@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "PIO Upload USB (esp32dev)",
+      "type": "shell",
+      "command": "platformio",
+      "args": [
+        "run",
+        "--target",
+        "upload",
+        "--environment",
+        "esp32dev"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "PIO Upload OTA (esp32dev_ota)",
+      "type": "shell",
+      "command": "platformio",
+      "args": [
+        "run",
+        "--target",
+        "upload",
+        "--environment",
+        "esp32dev_ota"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "PIO Upload OTA (auto detect env)",
+      "type": "shell",
+      "command": "python3",
+      "args": [
+        "-c",
+        "import configparser, re, subprocess, pathlib, sys; p=pathlib.Path('platformio.ini'); cp=configparser.ConfigParser(); cp.read(p); envs=[s.split(':',1)[1] for s in cp.sections() if s.startswith('env:')]; matches=[e for e in envs if re.search(r'(^|[-_])ota$', e, re.I)]; env=matches[0] if matches else None; print('OTA env:', env if env else 'NOT FOUND'); sys.exit(2) if env is None else subprocess.check_call(['platformio','run','--target','upload','--environment',env])"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
