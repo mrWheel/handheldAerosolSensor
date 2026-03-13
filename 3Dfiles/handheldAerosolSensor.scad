@@ -3,7 +3,7 @@
 //
 //  This is a box for a handheldAerosolSensor
 //
-//  Version 1.0.0 (12-03-2026)
+//  Version 1.0.0 (13-03-2026)
 //
 // This design is parameterized based on the size of a PCB.
 //
@@ -19,13 +19,22 @@ include <./YAPPgenerator_v3.3.8.scad>
 
 $fn=20;
 
-myPcb = "handheldAerosolSensorPCB.stl"; 
+myPcb    = "../documents/handheldAerosolSensorPCB.stl"; 
+myEpaper = "../documents/ePaper.stl"; 
 
 if (false)
 {
   translate([56.8, 39.5 , 25.7]) 
   {
     rotate([0,0,180]) color("gray") import(myPcb);
+  }
+}
+
+if (false)
+{
+  translate([127, 138,0]) 
+  {
+    rotate([0,0,180]) color("black") import(myEpaper);
   }
 }
 
@@ -361,12 +370,12 @@ cutoutsBase =
 cutoutsLid  = 
 [
 //      0,     1,  2,  3, 4,               5, 6,  --rest--
-     [100+19, 33, 31, 36, 1, yappRoundedRect, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display
+     [96+22, 33, 34, 31, 1, yappRoundedRect, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display
 //--     0,     1,          2, 3, 4,          5,       6,          7, --rest--
-    ,[100+2.5, 9+2.5,       2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
-    ,[100+2.5, 48+9-2.5,    2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
-    ,[100+33+2.5, 9+2.5,    2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
-    ,[100+33+2.5, 48+9-2.5, 2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[96+2.5, 16+2.5,       2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[96+2.5, 49-2.5,    2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[96+48-2.5, 16+2.5,    2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
+    ,[96+48-2.5, 49-2.5, 2, 2, 2, yappCircle, default, yappCenter, yappCoordPCB, "ePaper"] //-- ePaper Display cutout from PCB coordinates
 
 ];
 
@@ -380,7 +389,7 @@ cutoutsFront =
 cutoutsBack = 
 [
 // 0,  1,  2,  3, 4, 5, 6, --rest--
-  [51, 36, 15, 12, 1, yappRoundedRect, 3, yappCenter, yappCoordBox] //-- USB ESP32 programming port
+//[51, 36, 15, 12, 1, yappRoundedRect, 3, yappCenter, yappCoordBox] //-- USB ESP32 programming port
 ];
 
 cutoutsLeft =   

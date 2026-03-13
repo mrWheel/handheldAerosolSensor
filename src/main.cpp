@@ -1,4 +1,4 @@
-/*** Last Changed: 2026-03-13 - 12:21 ***/
+/*** Last Changed: 2026-03-13 - 18:04 ***/
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -28,7 +28,7 @@
 // — Program version string (keep manually updated with each release)
 // — NEVER CHANGE THIS const char* NAME
 // —             vvvvvvvvvvvvvv
-static const char* PROG_VERSION = "v0.10.3";
+static const char* PROG_VERSION = "v1.0.0";
 // —             ^^^^^^^^^^^^^^
 
 #ifndef E_PAPER_ROTATION
